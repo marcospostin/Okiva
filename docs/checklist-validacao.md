@@ -161,6 +161,8 @@ Em toda escrita: botão em carregamento, sem envio duplo, toast de sucesso; em e
 - [x] CRUD pelo app com sessão real, conferido no banco: gasto (criar → editar → apagar, com a fatura do cartão acompanhando), depósito em meta (criar → excluir, saved/deposited acompanhando), categoria (criar → recarregar a página e continuar lá → excluir)
 - [x] Pelo app, conferido no banco: cartões (criar → reordenar a carteira → editar → remover), metas (criar → editar + tornar principal → excluir, principal volta para a anterior), teto por categoria (criar → editar → remover, sem afetar outros usuários), teto do mês (editar → remover → recriar), fatura (importar 34 lançamentos → duplicata bloqueada pelo banco → desfazer, cartão volta à fatura anterior), perfil (nome, saldo, Plus, ocultar saldo, foto enviada ao bucket e lida após recarregar, remoção apaga o arquivo)
 - [x] DELETE de arquivo no Storage testado pela Storage API (remover foto)
+- [x] Demonstração por visitante: "Ver demonstração" cria conta anônima com os dados do Lucas (11 gastos, 49 depósitos, saldo R$ 14.500), isolada dos outros usuários; sair pela faixa ou pela Conta apaga a conta e os dados; limpeza agendada de contas demo com mais de 24 h; demo não envia arquivos ao Storage
+- [ ] Captcha (Turnstile) na entrada da demonstração, se aparecer abuso
 - [ ] Cadastrar `VITE_SUPABASE_URL` e `VITE_SUPABASE_ANON_KEY` na Vercel e ajustar Site URL / Redirect URLs no Auth
 - [ ] Ligar "Leaked Password Protection" no Auth (recomendação do advisor)
 

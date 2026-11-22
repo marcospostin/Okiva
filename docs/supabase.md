@@ -64,6 +64,24 @@ update auth.users
  where email = 'lucas@okiva.app';
 ```
 
+### Demonstração para visitantes (portfólio)
+
+Botão **"Ver demonstração"** no login: cada visitante recebe uma conta **anônima e temporária só dele**, já com os dados de exemplo do Lucas.
+
+| Peça | Como funciona |
+|---|---|
+| Entrada | `auth.signInAnonymously()` + RPC `seed_demo_account()` (copia cartões, gastos, metas, depósitos e tetos para a conta do visitante). Requer **Anonymous Sign-ins** ligado em Authentication → Sign In / Providers |
+| Isolamento | RLS normal: cada visitante só vê e altera a própria cópia; o admin e outros usuários não são afetados |
+| Sessão | Só na aba (sessionStorage) |
+| Sair | Faixa "Demonstração" no topo (Sair / Criar minha conta) ou Conta → "Sair da demonstração": chama `delete_my_account()` e a conta some com os dados na hora |
+| Quem só fecha a aba | `pg_cron` (job `okiva-cleanup-demo-accounts`, minuto 17 de cada hora) apaga contas anônimas com mais de 24 h (`private.cleanup_demo_accounts`) |
+| Storage | Contas demo não enviam arquivos (política restritiva `okiva_storage_no_demo_uploads`); a troca de foto fica escondida na demo |
+| Abuso | Sem captcha por enquanto; o Supabase limita criação de contas anônimas por IP (Authentication → Rate Limits). Turnstile pode ser ligado depois (o app precisa enviar `captchaToken` antes de ativar no Supabase) |
+
+Migration: `supabase/migrations/20261122191358_okiva_demo_accounts.sql`. O advisor passa a listar "Anonymous Access Policies" nas tabelas: esperado, os visitantes anônimos acessam **só as próprias linhas**.
+
+A conta fixa `lucas@okiva.app` continua existindo (sem senha) e não é usada pela demonstração.
+
 ### Administrador de teste (TEMPORÁRIO)
 
 - Conta `marcospostin@gmail.com` (Marcos), criada com `supabase/seed_admin.sql`, com os mesmos dados de exemplo da demo e `app_metadata.role = 'admin'`.

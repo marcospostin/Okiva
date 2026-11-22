@@ -524,6 +524,8 @@ function AccountSheet({ close }: { close: () => void }) {
   const [confirm, setConfirm] = useState(false)
   const [confirmClear, setConfirmClear] = useState(false)
   const photoInput = useRef<HTMLInputElement>(null)
+  // Demonstração: conta temporária (sem foto, sem e-mail); sair apaga tudo
+  const demo = !!state.user?.demo
 
   async function setPhoto(avatar?: string) {
     const user = state.user
@@ -556,7 +558,7 @@ function AccountSheet({ close }: { close: () => void }) {
           type="button"
           onClick={() => photoInput.current?.click()}
           aria-label="Trocar foto"
-          disabled={pending === 'photo'}
+          disabled={pending === 'photo' || demo}
           className="group relative shrink-0 rounded-full"
         >
           <Avatar user={state.user} size={64} />
@@ -565,9 +567,11 @@ function AccountSheet({ close }: { close: () => void }) {
               <Spinner />
             </span>
           )}
-          <span className="absolute -right-1 -bottom-1 grid size-[26px] place-items-center rounded-full bg-esk-lime text-esk-ink ring-2 ring-esk-surface transition group-hover:scale-110">
-            <Camera size={13} strokeWidth={2} />
-          </span>
+          {!demo && (
+            <span className="absolute -right-1 -bottom-1 grid size-[26px] place-items-center rounded-full bg-esk-lime text-esk-ink ring-2 ring-esk-surface transition group-hover:scale-110">
+              <Camera size={13} strokeWidth={2} />
+            </span>
+          )}
         </button>
         <div className="min-w-0">
           <p className="flex items-center gap-2 font-sat text-[19px] font-medium text-white">
@@ -578,8 +582,8 @@ function AccountSheet({ close }: { close: () => void }) {
               </span>
             )}
           </p>
-          <p className="truncate font-sat text-[14px] text-esk-muted">{state.user?.email}</p>
-          <div className="flex flex-wrap gap-x-3 gap-y-1 pt-1">
+          <p className="truncate font-sat text-[14px] text-esk-muted">{demo ? 'Conta de demonstração' : state.user?.email}</p>
+          {!demo && <div className="flex flex-wrap gap-x-3 gap-y-1 pt-1">
             <button type="button" onClick={() => openSheet({ type: 'profile' })} className="font-sat text-[13px] font-medium text-esk-lime hover:underline">
               Editar perfil
             </button>
@@ -591,7 +595,7 @@ function AccountSheet({ close }: { close: () => void }) {
                 Remover
               </button>
             )}
-          </div>
+          </div>}
         </div>
         <input ref={photoInput} type="file" accept="image/*" className="hidden" onChange={(e) => { pickPhoto(e.target.files?.[0]); e.target.value = '' }} />
       </div>
@@ -659,7 +663,8 @@ function AccountSheet({ close }: { close: () => void }) {
       </div>
       {confirm ? (
         <div className="mt-6 flex animate-rise flex-col gap-3">
-          <p className="font-sat text-[17px] font-medium text-white">Deseja sair?</p>
+          <p className="font-sat text-[17px] font-medium text-white">{demo ? 'Sair da demonstração?' : 'Deseja sair?'}</p>
+          {demo && <p className="-mt-1 font-sat text-[13px] text-esk-subtle">Os dados de exemplo desta visita serão apagados.</p>}
           <div className="grid grid-cols-2 gap-3">
             <PrimaryButton tone="dark" onClick={() => setConfirm(false)}>
               Ficar
@@ -678,7 +683,7 @@ function AccountSheet({ close }: { close: () => void }) {
         </div>
       ) : (
         <PrimaryButton tone="danger" className="mt-6" onClick={() => setConfirm(true)}>
-          Sair
+          {demo ? 'Sair da demonstração' : 'Sair'}
         </PrimaryButton>
       )}
     </Sheet>

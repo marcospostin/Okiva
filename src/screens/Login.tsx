@@ -1,8 +1,8 @@
-import { Camera, Check, Eye, EyeOff } from 'lucide-react'
+import { Camera, Check, Eye, EyeOff, Sparkles } from 'lucide-react'
 import { useRef, useState, type FormEvent } from 'react'
 import { cx, Field, inputClass, MoneyInput, PrimaryButton } from '../components/ui'
 import { readAvatar } from '../lib/image'
-import { signIn, signUp } from '../services/auth'
+import { signIn, signUp, startDemo } from '../services/auth'
 import { errorMessage, USE_SUPABASE } from '../services/http'
 import { accountState, useStore } from '../state/store'
 import { useUI } from '../state/ui'
@@ -10,8 +10,23 @@ import type { AppState, User } from '../types'
 
 type Mode = 'login' | 'signup'
 
+/** Saindo da demonstração por "Criar minha conta": o login abre direto no cadastro. */
+export const SIGNUP_NEXT_KEY = 'okiva:signup-next'
+
+function initialMode(): Mode {
+  try {
+    if (sessionStorage.getItem(SIGNUP_NEXT_KEY)) {
+      sessionStorage.removeItem(SIGNUP_NEXT_KEY)
+      return 'signup'
+    }
+  } catch {
+    /* storage indisponível */
+  }
+  return 'login'
+}
+
 export default function Login() {
-  const [mode, setMode] = useState<Mode>('login')
+  const [mode, setMode] = useState<Mode>(initialMode)
   return (
     <div className="grid min-h-dvh bg-esk-bg md:grid-cols-2">
       <div className="hidden p-6 md:block lg:p-10">
@@ -189,9 +204,48 @@ function LoginForm({ onSwitch }: { onSwitch: () => void }) {
           Entrar
         </PrimaryButton>
         {freeNote && <p className="text-center font-sat text-[13px] text-esk-subtle">{freeNote}</p>}
+        {REAL_AUTH && <DemoEntry />}
         <SwitchLink text="Ainda não tem conta?" action="Criar conta" onClick={onSwitch} />
       </form>
     </>
+  )
+}
+
+/** Entrada da demonstração: conta temporária com os dados do Lucas, só deste visitante. */
+function DemoEntry() {
+  const enter = useEnter()
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string>()
+
+  async function start() {
+    setError(undefined)
+    setLoading(true)
+    try {
+      const result = await startDemo()
+      if ('confirmEmail' in result) return
+      enter(result.user, { state: result.state, welcome: 'Bem-vindo à demonstração do Okiva' })
+    } catch (err) {
+      setError(errorMessage(err, 'Não deu para abrir a demonstração. Tente de novo.'))
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex items-center gap-3 font-sat text-[13px] text-esk-subtle" aria-hidden>
+        <span className="h-px flex-1 bg-esk-track" />
+        ou
+        <span className="h-px flex-1 bg-esk-track" />
+      </div>
+      <FormError message={error} />
+      <PrimaryButton tone="dark" onClick={start} loading={loading} loadingText="Preparando demonstração…">
+        <Sparkles size={17} strokeWidth={1.8} aria-hidden />
+        Ver demonstração
+      </PrimaryButton>
+      <p className="text-center font-sat text-[13px] leading-[1.4] text-esk-subtle">
+        Entre como Lucas, com dados de exemplo, sem cadastro. Tudo é apagado quando você sai.
+      </p>
+    </div>
   )
 }
 

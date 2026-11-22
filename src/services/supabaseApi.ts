@@ -156,7 +156,9 @@ export async function loadAccount(): Promise<AppState> {
   // Papel vem do app_metadata do Auth (só o servidor altera)
   const { data: session } = await db.auth.getSession()
   const role = session.session?.user.app_metadata?.role === 'admin' ? 'admin' : undefined
-  const user: User = { name: profile.name, email: profile.email, avatar: await avatarUrl(profile.avatar_url), role }
+  // Usuário anônimo = conta de demonstração temporária
+  const demo = session.session?.user.is_anonymous === true || undefined
+  const user: User = { name: profile.name, email: profile.email, avatar: await avatarUrl(profile.avatar_url), role, demo }
   return {
     user,
     stage: (profile.stage === 1 ? 1 : 2) as Stage,

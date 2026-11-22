@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect, useState } from 'react'
 import { onSignedOut, restoreSupabaseSession } from './services/auth'
 import { USE_SUPABASE } from './services/http'
+import DemoBanner from './components/DemoBanner'
 import TabBar from './components/TabBar'
 import { cx, ScreenSkeleton, ToastView } from './components/ui'
 import Home from './screens/Home'
@@ -67,6 +68,7 @@ function Screen() {
 
   return (
     <div className="tabbar-space">
+      <DemoBanner />
       <main key={view} className={cx('pb-[var(--tabbar-space)]', direction === 'back' ? 'animate-screen-back' : 'animate-screen-forward')}>
         <Suspense fallback={<ScreenSkeleton />}>
           {view === 'home' && <Home />}

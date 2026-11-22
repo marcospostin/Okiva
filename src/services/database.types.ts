@@ -419,7 +419,9 @@ export type Database = {
         }
         Returns: Json
       }
+      is_admin: { Args: never; Returns: boolean }
       is_builtin_category: { Args: { p_category: string }; Returns: boolean }
+      is_demo: { Args: never; Returns: boolean }
       is_valid_category: {
         Args: { p_category: string; p_user: string }
         Returns: boolean
@@ -431,6 +433,7 @@ export type Database = {
         Returns: number
       }
       reorder_cards: { Args: { p_order: string[] }; Returns: undefined }
+      seed_demo_account: { Args: never; Returns: undefined }
       set_balance: { Args: { p_balance: number }; Returns: number }
     }
     Enums: {

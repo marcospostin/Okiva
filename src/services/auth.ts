@@ -97,6 +97,36 @@ async function supabaseSignUp(input: { name: string; email: string; password: st
   return { user: state.user!, state }
 }
 
+/**
+ * "Ver demonstração": cria uma conta anônima temporária só deste visitante e copia
+ * para ela os dados de exemplo do Lucas (seed_demo_account no banco). A sessão vale
+ * só nesta aba; ao sair, a conta e os dados são apagados (ver signOut). Quem só fecha
+ * a aba é removido pela limpeza agendada no banco (contas demo com mais de 24 h).
+ */
+export async function startDemo(): Promise<AuthResult> {
+  if (!USE_SUPABASE) return { user: await localSignIn({ email: '', remember: false }) }
+  setRemember(false)
+  const { error } = await sb().auth.signInAnonymously()
+  if (error) {
+    if (/anonymous.*disabled|not enabled/i.test(error.message)) throw new ApiError('A demonstração está desativada no momento.', 503)
+    throw authError(error)
+  }
+  const { error: seedError } = await sb().rpc('seed_demo_account')
+  if (seedError) {
+    await sb().auth.signOut({ scope: 'local' })
+    throw new ApiError('Não deu para preparar a demonstração. Tente de novo.', 500)
+  }
+  const state = await loadAccount()
+  return { user: state.user!, state }
+}
+
+/** Fecha a sessão no Supabase; numa conta de demonstração, apaga a conta e os dados antes. */
+async function endSupabaseSession() {
+  const { data } = await sb().auth.getSession()
+  if (data.session?.user.is_anonymous) await sb().rpc('delete_my_account').then(undefined, () => undefined)
+  await sb().auth.signOut({ scope: 'local' })
+}
+
 /** Sessão salva (ou vinda do link de confirmação): devolve a conta carregada do banco. */
 export async function restoreSupabaseSession(): Promise<AppState | null> {
   if (!USE_SUPABASE) return null
@@ -167,7 +197,7 @@ export function deleteLocalAccount(email: string) {
 export function signOut() {
   localStorage.removeItem(SESSION_KEY)
   sessionStorage.removeItem(SESSION_KEY)
-  if (USE_SUPABASE) void sb().auth.signOut({ scope: 'local' })
+  if (USE_SUPABASE) void endSupabaseSession()
 }
 
 export function sessionEmail() {

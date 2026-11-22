@@ -99,6 +99,8 @@ export interface User {
   avatar?: string
   /** 'admin' = full access in the database (Supabase app_metadata.role) */
   role?: 'admin'
+  /** Temporary demo account (Supabase anonymous user with the example data); deleted on sign-out */
+  demo?: boolean
 }
 
 export type Stage = 1 | 2
