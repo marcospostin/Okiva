@@ -1,5 +1,5 @@
-import { ChevronDown, Sparkles } from 'lucide-react'
-import { useMemo, useState } from 'react'
+import { ChevronDown, ChevronLeft, ChevronRight, Sparkles } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { categoryMeta } from '../data/categories'
 import { Asset, CategoryRowIcon, CategoryTileIcon } from '../components/icons'
 import { Avatar, CountUp, cx, Page } from '../components/ui'
@@ -18,6 +18,74 @@ import { useUI } from '../state/ui'
 
 const monthLabel = (key: string) => capitalize(monthName(Number(key.slice(5, 7)) - 1))
 
+/** Até 3 cards cabem lado a lado em qualquer largura; acima disso vira carrossel. */
+const STATIC_TILES = 3
+
+/**
+ * Cards de categoria do mês.
+ * - Até 3: grade fixa de 3 colunas (igual ao design original).
+ * - Mais de 3: carrossel com rolagem e encaixe (scroll-snap). Mostra ~2,3 cards no
+ *   celular e ~3,3 no tablet/desktop: o card cortado na borda indica que há mais.
+ *   No celular o carrossel vai até a borda da tela; no desktop aparecem setas.
+ */
+function CategoryTiles({ count, children }: { count: number; children: ReactNode }) {
+  const rail = useRef<HTMLDivElement>(null)
+  const [edges, setEdges] = useState({ prev: false, next: true })
+  const carousel = count > STATIC_TILES
+
+  const update = useCallback(() => {
+    const el = rail.current
+    if (!el) return
+    setEdges({ prev: el.scrollLeft > 4, next: el.scrollLeft + el.clientWidth < el.scrollWidth - 4 })
+  }, [])
+
+  useEffect(() => {
+    if (!carousel) return
+    update()
+    window.addEventListener('resize', update)
+    return () => window.removeEventListener('resize', update)
+  }, [carousel, count, update])
+
+  if (!carousel) return <div className="grid grid-cols-3 gap-3">{children}</div>
+
+  const go = (dir: 1 | -1) => {
+    const el = rail.current
+    if (el) el.scrollBy({ left: dir * el.clientWidth * 0.75, behavior: 'smooth' })
+  }
+
+  return (
+    <div className="relative min-w-0" role="region" aria-roledescription="carrossel" aria-label="Categorias do mês">
+      <div
+        ref={rail}
+        onScroll={update}
+        className={cx(
+          '-mx-[32px] flex snap-x snap-mandatory scroll-px-[32px] gap-3 overflow-x-auto px-[32px] pb-1 [scrollbar-width:none] md:mx-0 md:scroll-px-0 md:px-0 [&::-webkit-scrollbar]:hidden',
+          // Each card: ~2.3 visible on phones, ~3.3 from tablets up
+          '[&>*]:shrink-0 [&>*]:basis-[calc((100%-12px)/2.3)] [&>*]:snap-start md:[&>*]:basis-[calc((100%-24px)/3.3)]',
+        )}
+      >
+        {children}
+      </div>
+      {(['prev', 'next'] as const).map((side) => (
+        <button
+          key={side}
+          type="button"
+          aria-label={side === 'prev' ? 'Categorias anteriores' : 'Mais categorias'}
+          onClick={() => go(side === 'prev' ? -1 : 1)}
+          tabIndex={edges[side] ? 0 : -1}
+          className={cx(
+            'absolute top-1/2 hidden size-[36px] -translate-y-1/2 place-items-center rounded-full bg-esk-ink/85 text-white shadow-[0_6px_20px_rgba(0,0,0,0.45)] ring-1 ring-white/10 backdrop-blur transition duration-200 hover:bg-esk-ink md:grid',
+            side === 'prev' ? '-left-[14px]' : '-right-[14px]',
+            edges[side] ? 'opacity-100' : 'pointer-events-none opacity-0',
+          )}
+        >
+          {side === 'prev' ? <ChevronLeft size={18} strokeWidth={2} /> : <ChevronRight size={18} strokeWidth={2} />}
+        </button>
+      ))}
+    </div>
+  )
+}
+
 export default function Home() {
   const { state, dispatch } = useStore()
   const { navigate, openSheet } = useUI()
@@ -32,6 +100,21 @@ export default function Home() {
   const available = state.budget.total - summary.total
   const variation = summary.previousTotal ? pct(summary.total - summary.previousTotal, summary.previousTotal) : null
   const txs = showAll ? summary.transactions : summary.transactions.slice(0, 6)
+
+  // Cards do mês: todas as categorias com teto em Metas (mesmo sem gasto, ex.: Lazer)
+  // + categorias com gasto e sem teto, para cada trecho da barra ter o seu card.
+  const tiles = useMemo(() => {
+    const spent = new Map(summary.byCategory.map((c) => [c.category, c.amount]))
+    const capped = (Object.entries(state.budget.caps) as [string, number][]).map(([category, cap]) => ({
+      category,
+      amount: spent.get(category) ?? 0,
+      cap: cap as number | undefined,
+    }))
+    const uncapped = summary.byCategory
+      .filter((c) => state.budget.caps[c.category] === undefined)
+      .map((c) => ({ category: c.category, amount: c.amount, cap: undefined as number | undefined }))
+    return [...capped, ...uncapped].sort((a, b) => b.amount - a.amount)
+  }, [summary.byCategory, state.budget.caps])
 
   const shortcuts = [
     { key: 'add', label: 'Adicionar', icon: <Asset name="0a681.svg" size={23} />, onClick: () => openSheet({ type: 'add' }), primary: true },
@@ -139,8 +222,9 @@ export default function Home() {
           </div>
 
           {/* Right: this month + transactions */}
-          <div className="grid gap-8 md:gap-10 3xl:grid-cols-2 3xl:gap-12">
-            <section aria-label="Gastos do mês" className="flex flex-col gap-4">
+          {/* min-w-0: grid items grow to fit their content by default; the carousel must scroll instead */}
+          <div className="grid min-w-0 gap-8 md:gap-10 3xl:grid-cols-2 3xl:gap-12">
+            <section aria-label="Gastos do mês" className="flex min-w-0 flex-col gap-4">
               <div className="flex items-center justify-between">
                 <p className="font-inter-m text-[11px] leading-[1.3] font-medium tracking-[1.1px] text-esk-muted">
                   {isCurrent ? 'ESTE MÊS' : 'MÊS'}
@@ -212,15 +296,15 @@ export default function Home() {
                 )}
               </div>
 
-              {summary.byCategory.length > 0 && (
-                <div className="grid grid-cols-3 gap-3">
-                  {summary.byCategory.slice(0, 3).map((c, i) => (
+              {tiles.length > 0 && (
+                <CategoryTiles count={tiles.length}>
+                  {tiles.map((c, i) => (
                     <button
                       key={c.category}
                       type="button"
                       onClick={() => navigate('goals')}
                       className="flex h-[142px] min-w-0 animate-rise flex-col items-start gap-2 rounded-[26px] pt-4 pr-[10px] pb-[14px] pl-[13px] text-left text-esk-ink transition duration-200 hover:-translate-y-0.5 hover:brightness-[0.97] active:scale-[0.97] lg:h-[156px] lg:pl-4"
-                      style={{ backgroundColor: categoryMeta(state, c.category).color, animationDelay: `${80 + i * 60}ms` }}
+                      style={{ backgroundColor: categoryMeta(state, c.category).color, animationDelay: `${80 + Math.min(i, 5) * 60}ms` }}
                     >
                       <CategoryTileIcon category={c.category} />
                       <span className="flex min-w-0 flex-col gap-[3px] leading-[1.3]">
@@ -230,11 +314,11 @@ export default function Home() {
                         </span>
                       </span>
                       <span className="mt-auto font-inter text-[9px] leading-[1.3] text-esk-ink-2 lg:text-[10px]">
-                        {pct(c.amount, summary.total)}% do total
+                        {c.cap !== undefined ? `${pct(c.amount, c.cap)}% do teto` : 'Sem teto'}
                       </span>
                     </button>
                   ))}
-                </div>
+                </CategoryTiles>
               )}
             </section>
 

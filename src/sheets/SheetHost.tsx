@@ -534,7 +534,7 @@ function AccountSheet({ close }: { close: () => void }) {
     if (demo) {
       setDemoAvatar(avatar)
       dispatch({ type: 'setAvatar', avatar })
-      notify(avatar ? 'Foto atualizada (só nesta demonstração)' : 'Foto removida')
+      notify(avatar ? 'Foto atualizada (só nesta demonstração)' : 'Foto do Lucas de volta')
       return
     }
     await run(
@@ -600,7 +600,7 @@ function AccountSheet({ close }: { close: () => void }) {
             </button>
             {state.user?.avatar && (
               <button type="button" onClick={() => setPhoto(undefined)} className="font-sat text-[13px] text-esk-subtle hover:text-white">
-                Remover
+                {demo ? 'Voltar à foto do Lucas' : 'Remover'}
               </button>
             )}
           </div>

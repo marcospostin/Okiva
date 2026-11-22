@@ -56,12 +56,12 @@ export function Spinner({ className }: { className?: string }) {
 
 /* ------------------------------------------------------------------ avatar */
 
-/** Demo account keeps the photo from the design; new accounts get initials. */
+/** Lucas (demo account and the visitor demo) keeps the photo from the design; new accounts get initials. */
 export function Avatar({ user, size = 44 }: { user: User | null; size?: number }) {
   if (user?.avatar) {
     return <img alt="" src={user.avatar} width={size} height={size} className="block shrink-0 rounded-full object-cover" style={{ width: size, height: size }} />
   }
-  if (!user || user.email === DEMO_USER.email) {
+  if (!user || user.email === DEMO_USER.email || user.demo) {
     return <img alt="" src="/assets/7acab.png" width={size} height={size} className="block rounded-full" style={{ width: size, height: size }} />
   }
   const initials = user.name.split(/\s+/).filter(Boolean).slice(0, 2).map((p) => p[0]!.toUpperCase()).join('')
