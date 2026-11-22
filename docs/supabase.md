@@ -100,7 +100,7 @@ Botão **"Ver demonstração"** no login: cada visitante recebe uma conta **anô
 | Sessão | Só na aba (sessionStorage) |
 | Sair | Faixa "Demonstração" no topo (Sair / Criar minha conta) ou Conta → "Sair da demonstração": chama `delete_my_account()` e a conta some com os dados na hora |
 | Quem só fecha a aba | `pg_cron` (job `okiva-cleanup-demo-accounts`, minuto 17 de cada hora) apaga contas anônimas com mais de 24 h (`private.cleanup_demo_accounts`) |
-| Storage | Contas demo não enviam arquivos (política restritiva `okiva_storage_no_demo_uploads`); a troca de foto fica escondida na demo |
+| Foto | Na demo a troca de foto funciona, mas a imagem fica **só na aba** (sessionStorage), nunca vai ao Storage nem ao banco; some ao sair. Proteção extra: a política restritiva `okiva_storage_no_demo_uploads` bloqueia qualquer envio de conta demo ao Storage |
 | Abuso | Sem captcha por enquanto; o Supabase limita criação de contas anônimas por IP (Authentication → Rate Limits). Turnstile pode ser ligado depois (o app precisa enviar `captchaToken` antes de ativar no Supabase) |
 
 Migration: `supabase/migrations/20261122191358_okiva_demo_accounts.sql`. O advisor passa a listar "Anonymous Access Policies" nas tabelas: esperado, os visitantes anônimos acessam **só as próprias linhas**.

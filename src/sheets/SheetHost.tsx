@@ -6,7 +6,7 @@ import { CategoryRowIcon } from '../components/icons'
 import { Avatar, Chip, cx, Field, inputClass, MoneyInput, PrimaryButton, Sheet, Spinner, Switch } from '../components/ui'
 import { brl, brlShort, longDate, pct, privateExpense, privateMoney } from '../lib/format'
 import { balanceOf, currentMonth, forgetAccountData, methodLabel, todayISO, useStore } from '../state/store'
-import { deleteLocalAccount, signOut, updateAccount } from '../services/auth'
+import { deleteLocalAccount, setDemoAvatar, signOut, updateAccount } from '../services/auth'
 import { accountApi, budgetApi, cardsApi, categoriesApi, goalsApi, invoicesApi, transactionsApi } from '../services/finance'
 import { setToken, USE_SUPABASE } from '../services/http'
 import { readAvatar } from '../lib/image'
@@ -524,12 +524,19 @@ function AccountSheet({ close }: { close: () => void }) {
   const [confirm, setConfirm] = useState(false)
   const [confirmClear, setConfirmClear] = useState(false)
   const photoInput = useRef<HTMLInputElement>(null)
-  // Demonstração: conta temporária (sem foto, sem e-mail); sair apaga tudo
+  // Demonstração: conta temporária sem e-mail; a foto fica só na aba; sair apaga tudo
   const demo = !!state.user?.demo
 
   async function setPhoto(avatar?: string) {
     const user = state.user
     if (!user) return
+    // Demonstração: a foto fica só nesta aba do navegador (nada vai ao Storage nem ao banco)
+    if (demo) {
+      setDemoAvatar(avatar)
+      dispatch({ type: 'setAvatar', avatar })
+      notify(avatar ? 'Foto atualizada (só nesta demonstração)' : 'Foto removida')
+      return
+    }
     await run(
       'photo',
       () => accountApi.updateProfile({ avatar }),
@@ -558,7 +565,7 @@ function AccountSheet({ close }: { close: () => void }) {
           type="button"
           onClick={() => photoInput.current?.click()}
           aria-label="Trocar foto"
-          disabled={pending === 'photo' || demo}
+          disabled={pending === 'photo'}
           className="group relative shrink-0 rounded-full"
         >
           <Avatar user={state.user} size={64} />
@@ -567,11 +574,9 @@ function AccountSheet({ close }: { close: () => void }) {
               <Spinner />
             </span>
           )}
-          {!demo && (
-            <span className="absolute -right-1 -bottom-1 grid size-[26px] place-items-center rounded-full bg-esk-lime text-esk-ink ring-2 ring-esk-surface transition group-hover:scale-110">
-              <Camera size={13} strokeWidth={2} />
-            </span>
-          )}
+          <span className="absolute -right-1 -bottom-1 grid size-[26px] place-items-center rounded-full bg-esk-lime text-esk-ink ring-2 ring-esk-surface transition group-hover:scale-110">
+            <Camera size={13} strokeWidth={2} />
+          </span>
         </button>
         <div className="min-w-0">
           <p className="flex items-center gap-2 font-sat text-[19px] font-medium text-white">
@@ -583,10 +588,13 @@ function AccountSheet({ close }: { close: () => void }) {
             )}
           </p>
           <p className="truncate font-sat text-[14px] text-esk-muted">{demo ? 'Conta de demonstração' : state.user?.email}</p>
-          {!demo && <div className="flex flex-wrap gap-x-3 gap-y-1 pt-1">
-            <button type="button" onClick={() => openSheet({ type: 'profile' })} className="font-sat text-[13px] font-medium text-esk-lime hover:underline">
-              Editar perfil
-            </button>
+          <div className="flex flex-wrap gap-x-3 gap-y-1 pt-1">
+            {/* Perfil (e-mail, excluir conta) não se aplica à conta temporária da demonstração */}
+            {!demo && (
+              <button type="button" onClick={() => openSheet({ type: 'profile' })} className="font-sat text-[13px] font-medium text-esk-lime hover:underline">
+                Editar perfil
+              </button>
+            )}
             <button type="button" onClick={() => photoInput.current?.click()} className="font-sat text-[13px] font-medium text-esk-lime hover:underline">
               Trocar foto
             </button>
@@ -595,7 +603,7 @@ function AccountSheet({ close }: { close: () => void }) {
                 Remover
               </button>
             )}
-          </div>}
+          </div>
         </div>
         <input ref={photoInput} type="file" accept="image/*" className="hidden" onChange={(e) => { pickPhoto(e.target.files?.[0]); e.target.value = '' }} />
       </div>

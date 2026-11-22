@@ -144,6 +144,7 @@ async function applyPendingAvatar(state: AppState): Promise<AppState> {
 export async function startDemo(): Promise<AuthResult> {
   if (!USE_SUPABASE) return { user: await localSignIn({ email: '', remember: false }) }
   setRemember(false)
+  setDemoAvatar(undefined)
   const { error } = await sb().auth.signInAnonymously()
   if (error) {
     if (/anonymous.*disabled|not enabled/i.test(error.message)) throw new ApiError('A demonstração está desativada no momento.', 503)
@@ -158,8 +159,35 @@ export async function startDemo(): Promise<AuthResult> {
   return { user: state.user!, state }
 }
 
+/* Foto da demonstração: fica só nesta aba (sessionStorage), nunca vai ao Storage */
+const DEMO_AVATAR_KEY = 'okiva:demo-avatar'
+
+export function setDemoAvatar(avatar?: string) {
+  try {
+    if (avatar) sessionStorage.setItem(DEMO_AVATAR_KEY, avatar)
+    else sessionStorage.removeItem(DEMO_AVATAR_KEY)
+  } catch {
+    /* sem storage: a foto vale até recarregar a página */
+  }
+}
+
+function getDemoAvatar(): string | undefined {
+  try {
+    return sessionStorage.getItem(DEMO_AVATAR_KEY) ?? undefined
+  } catch {
+    return undefined
+  }
+}
+
+/** Na demonstração, a foto vem da aba (se o visitante escolheu uma). */
+function withDemoAvatar(state: AppState): AppState {
+  if (!state.user?.demo) return state
+  return { ...state, user: { ...state.user, avatar: getDemoAvatar() } }
+}
+
 /** Fecha a sessão no Supabase; numa conta de demonstração, apaga a conta e os dados antes. */
 async function endSupabaseSession() {
+  setDemoAvatar(undefined)
   const { data } = await sb().auth.getSession()
   if (data.session?.user.is_anonymous) await sb().rpc('delete_my_account').then(undefined, () => undefined)
   await sb().auth.signOut({ scope: 'local' })
@@ -171,7 +199,8 @@ export async function restoreSupabaseSession(): Promise<AppState | null> {
   const { data } = await sb().auth.getSession()
   if (!data.session) return null
   try {
-    return await applyPendingAvatar(await loadAccount())
+    // Recarregou a página na demonstração: a foto escolhida continua (vem da aba)
+    return withDemoAvatar(await applyPendingAvatar(await loadAccount()))
   } catch {
     await sb().auth.signOut({ scope: 'local' })
     return null
