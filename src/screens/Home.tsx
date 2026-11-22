@@ -20,13 +20,37 @@ const monthLabel = (key: string) => capitalize(monthName(Number(key.slice(5, 7))
 
 /** Até 3 cards cabem lado a lado em qualquer largura; acima disso vira carrossel. */
 const STATIC_TILES = 3
+/** Máximo de cards na Home (o último vira "Ver todos" somando o restante). */
+const MAX_TILES_WIDE = 8
+const MAX_TILES_NARROW = 6
+/** Cor do trecho "restante" na barra e do marcador no card "Ver todos". */
+const REST_COLOR = '#4e4e55'
+
+/** true quando a media query bate (atualiza ao redimensionar). */
+function useMediaQuery(query: string) {
+  const [matches, setMatches] = useState(() => typeof window !== 'undefined' && window.matchMedia(query).matches)
+  useEffect(() => {
+    const mq = window.matchMedia(query)
+    const on = () => setMatches(window.matchMedia(query).matches)
+    on()
+    // 'change' cobre a maioria dos navegadores; 'resize' garante quando o evento não dispara
+    mq.addEventListener('change', on)
+    window.addEventListener('resize', on)
+    return () => {
+      mq.removeEventListener('change', on)
+      window.removeEventListener('resize', on)
+    }
+  }, [query])
+  return matches
+}
 
 /**
  * Cards de categoria do mês.
  * - Até 3: grade fixa de 3 colunas (igual ao design original).
  * - Mais de 3: carrossel com rolagem e encaixe (scroll-snap). Mostra ~2,3 cards no
  *   celular e ~3,3 no tablet/desktop: o card cortado na borda indica que há mais.
- *   No celular o carrossel vai até a borda da tela; no desktop aparecem setas.
+ *   No celular o carrossel vai até a borda da tela. Com mouse/trackpad (qualquer
+ *   largura) aparecem setas; em tela de toque, desliza com o dedo.
  */
 function CategoryTiles({ count, children }: { count: number; children: ReactNode }) {
   const rail = useRef<HTMLDivElement>(null)
@@ -74,8 +98,9 @@ function CategoryTiles({ count, children }: { count: number; children: ReactNode
           onClick={() => go(side === 'prev' ? -1 : 1)}
           tabIndex={edges[side] ? 0 : -1}
           className={cx(
-            'absolute top-1/2 hidden size-[36px] -translate-y-1/2 place-items-center rounded-full bg-esk-ink/85 text-white shadow-[0_6px_20px_rgba(0,0,0,0.45)] ring-1 ring-white/10 backdrop-blur transition duration-200 hover:bg-esk-ink md:grid',
-            side === 'prev' ? '-left-[14px]' : '-right-[14px]',
+            // Arrows on any width when there is a mouse/trackpad (hover); touch screens swipe instead
+            'absolute top-1/2 hidden size-[36px] -translate-y-1/2 place-items-center rounded-full bg-esk-ink/85 text-white shadow-[0_6px_20px_rgba(0,0,0,0.45)] ring-1 ring-white/10 backdrop-blur transition duration-200 hover:bg-esk-ink [@media(hover:hover)]:grid',
+            side === 'prev' ? 'left-[-10px] md:-left-[14px]' : 'right-[-10px] md:-right-[14px]',
             edges[side] ? 'opacity-100' : 'pointer-events-none opacity-0',
           )}
         >
@@ -115,6 +140,23 @@ export default function Home() {
       .map((c) => ({ category: c.category, amount: c.amount, cap: undefined as number | undefined }))
     return [...capped, ...uncapped].sort((a, b) => b.amount - a.amount)
   }, [summary.byCategory, state.budget.caps])
+
+  // Limite de cards: 8 a partir do tablet, 6 no celular. Passou disso, o último card
+  // vira "Ver todos" e soma as categorias que não aparecem (o mesmo vale na barra).
+  const wide = useMediaQuery('(min-width: 768px)')
+  const maxTiles = wide ? MAX_TILES_WIDE : MAX_TILES_NARROW
+  const overflow = tiles.length > maxTiles
+  const shownTiles = overflow ? tiles.slice(0, maxTiles - 1) : tiles
+  const restTiles = overflow ? tiles.slice(maxTiles - 1) : []
+  const restAmount = restTiles.reduce((s, t) => s + t.amount, 0)
+  const barSegments = useMemo(() => {
+    const rest = new Set(restTiles.map((t) => t.category))
+    const segs = summary.byCategory
+      .filter((c) => !rest.has(c.category))
+      .map((c) => ({ key: c.category, amount: c.amount, color: categoryMeta(state, c.category).color }))
+    if (restAmount > 0) segs.push({ key: '__rest', amount: restAmount, color: REST_COLOR })
+    return segs
+  }, [summary.byCategory, restTiles, restAmount, state])
 
   const shortcuts = [
     { key: 'add', label: 'Adicionar', icon: <Asset name="0a681.svg" size={23} />, onClick: () => openSheet({ type: 'add' }), primary: true },
@@ -283,22 +325,22 @@ export default function Home() {
               )}
 
               <div className="flex h-[10px] gap-1 overflow-hidden rounded-[5px]" aria-hidden>
-                {summary.byCategory.length === 0 ? (
+                {barSegments.length === 0 ? (
                   <div className="h-full flex-1 rounded-[3px] bg-esk-track" />
                 ) : (
-                  summary.byCategory.map((c) => (
+                  barSegments.map((s) => (
                     <div
-                      key={c.category}
+                      key={s.key}
                       className="h-full origin-left animate-[grow-x_600ms_cubic-bezier(0.2,0.8,0.2,1)_both] rounded-[3px] transition-[flex-grow] duration-500"
-                      style={{ flexGrow: c.amount, backgroundColor: categoryMeta(state, c.category).color }}
+                      style={{ flexGrow: s.amount, backgroundColor: s.color }}
                     />
                   ))
                 )}
               </div>
 
               {tiles.length > 0 && (
-                <CategoryTiles count={tiles.length}>
-                  {tiles.map((c, i) => (
+                <CategoryTiles count={shownTiles.length + (overflow ? 1 : 0)}>
+                  {shownTiles.map((c, i) => (
                     <button
                       key={c.category}
                       type="button"
@@ -318,6 +360,36 @@ export default function Home() {
                       </span>
                     </button>
                   ))}
+                  {/* Último card: soma das categorias que não cabem na Home (mesmo trecho cinza na barra) */}
+                  {overflow && (
+                    <button
+                      type="button"
+                      onClick={() => navigate('goals')}
+                      aria-label={`Ver todas as categorias: mais ${restTiles.length}, ${privateMoney(brlShort(restAmount), hidden)} no mês`}
+                      className="group flex h-[142px] min-w-0 animate-rise flex-col items-start gap-2 rounded-[26px] bg-esk-tile pt-4 pr-[10px] pb-[14px] pl-[13px] text-left text-white ring-1 ring-esk-track transition duration-200 hover:-translate-y-0.5 hover:bg-[#232327] active:scale-[0.97] lg:h-[156px] lg:pl-4"
+                      style={{ animationDelay: `${80 + Math.min(shownTiles.length, 5) * 60}ms` }}
+                    >
+                      {/* Cores das categorias escondidas */}
+                      <span className="flex h-[24px] items-center -space-x-[5px]" aria-hidden>
+                        {restTiles.slice(0, 4).map((t) => (
+                          <span key={t.category} className="size-[16px] rounded-full ring-2 ring-esk-tile" style={{ backgroundColor: categoryMeta(state, t.category).color }} />
+                        ))}
+                      </span>
+                      <span className="flex min-w-0 flex-col gap-[3px] leading-[1.3]">
+                        <span className="flex items-center gap-[6px] truncate font-inter-m text-[10px] font-medium text-esk-muted lg:text-[11px]">
+                          <span className="size-[8px] shrink-0 rounded-[2px]" style={{ backgroundColor: REST_COLOR }} aria-hidden />
+                          +{restTiles.length} {restTiles.length === 1 ? 'categoria' : 'categorias'}
+                        </span>
+                        <span className="font-inter-sb text-[18px] font-semibold tracking-[-0.54px] whitespace-nowrap lg:text-[20px]">
+                          {privateMoney(brlShort(restAmount), hidden)}
+                        </span>
+                      </span>
+                      <span className="mt-auto flex items-center gap-1 font-inter-m text-[10px] font-medium text-esk-lime lg:text-[11px]">
+                        Ver todas
+                        <ChevronRight size={12} strokeWidth={2.2} className="transition group-hover:translate-x-0.5" aria-hidden />
+                      </span>
+                    </button>
+                  )}
                 </CategoryTiles>
               )}
             </section>
