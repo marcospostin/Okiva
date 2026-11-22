@@ -1,0 +1,27 @@
+import { Meta } from '@storybook/addon-docs/blocks'
+
+<Meta title="Introdução" />
+
+# Okiva — Design System
+
+Documentação viva dos componentes do app. Tudo aqui renderiza o código real de `src/components`.
+
+## Como está organizado
+
+- **Fundamentos** — os design tokens (primitivos e semânticos) gerados de `tokens/tokens.source.mjs`. Os mesmos tokens existem como variáveis no Figma, nas coleções `primitives` e `semantic`.
+- **Componentes** — cada componente de `src/components/ui.tsx` e `src/components/icons.tsx`, com controles para testar as props.
+- **Telas** — o app completo, para ver os componentes em contexto.
+
+## Tokens
+
+- Fonte única: `tokens/tokens.source.mjs`
+- Gerar artefatos: `pnpm tokens` (atualiza `tokens/tokens.json`, `tokens/tokens.css` e `docs/design-tokens.md`)
+- Nomenclatura: kebab-case. `color/background/bg-surface` no Figma = `--color-bg-surface` no CSS.
+- Componentes usam **só tokens semânticos**; primitivos ficam ocultos nos seletores do Figma.
+
+## Rodando
+
+```bash
+pnpm storybook        # http://localhost:6006
+pnpm build-storybook  # gera storybook-static/
+```

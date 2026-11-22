@@ -1,0 +1,303 @@
+import { Camera, Check } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { categoryIds, categoryMeta } from '../data/categories'
+import type { CategoryId } from '../types'
+import { Asset, CategoryRowIcon } from '../components/icons'
+import { ActionRow, Chip, CountUp, cx, FeatureCard, LinkButton, ListPanel, ListRow, Page, PrimaryButton, ProgressBar, RoundButton, ScreenHeader, SectionHeader } from '../components/ui'
+import { brl, brlShort, monthKey, privateMoney } from '../lib/format'
+import { readInvoice, type InvoiceResult } from '../services/ai'
+import { invoicesApi } from '../services/finance'
+import { errorMessage } from '../services/http'
+import { currentMonth, todayISO, useStore } from '../state/store'
+import { useMutation } from '../state/useMutation'
+import { useUI } from '../state/ui'
+
+type Phase = { name: 'pick' } | { name: 'reading'; file: File; progress: number } | { name: 'found'; result: InvoiceResult }
+
+const MAX_MB = 20
+
+export default function Invoice() {
+  const { state, dispatch } = useStore()
+  const { navigate } = useUI()
+  const { run, pending } = useMutation()
+  const [phase, setPhase] = useState<Phase>({ name: 'pick' })
+  const [error, setError] = useState<string | null>(null)
+  const [selected, setSelected] = useState<Set<number>>(new Set())
+  const [showAll, setShowAll] = useState(false)
+  /** Category corrections made by the person before confirming */
+  const [cats, setCats] = useState<Record<number, CategoryId>>({})
+  const [cardId, setCardId] = useState(state.cards[0]?.id ?? '')
+  const hidden = state.hideBalance
+  const pdfInput = useRef<HTMLInputElement>(null)
+  const photoInput = useRef<HTMLInputElement>(null)
+  const abort = useRef<AbortController | null>(null)
+
+  useEffect(() => () => abort.current?.abort(), [])
+
+  async function start(file: File | undefined) {
+    if (!file) return
+    const ok = file.type === 'application/pdf' || file.type.startsWith('image/')
+    if (!ok) return setError('Envie um PDF ou uma foto (JPG, PNG, HEIC).')
+    if (file.size > MAX_MB * 1024 * 1024) return setError(`O arquivo passa de ${MAX_MB} MB.`)
+    setError(null)
+    abort.current?.abort()
+    const ctrl = new AbortController()
+    abort.current = ctrl
+    setPhase({ name: 'reading', file, progress: 0 })
+    try {
+      const result = await readInvoice(file, (progress) => setPhase({ name: 'reading', file, progress }), ctrl.signal)
+      setSelected(new Set(result.items.map((_, i) => i)))
+      setCats({})
+      setShowAll(false)
+      setPhase({ name: 'found', result })
+    } catch (e) {
+      if ((e as Error).name !== 'AbortError') {
+        setError(errorMessage(e, 'Não conseguimos ler essa fatura. Tente outra foto ou o PDF.'))
+        setPhase({ name: 'pick' })
+      }
+    }
+  }
+
+  const pickAgain = () => (phase.name === 'reading' && phase.file.type.startsWith('image/') ? photoInput : pdfInput).current?.click()
+
+  async function confirm() {
+    if (phase.name !== 'found') return
+    const result = phase.result
+    const items = result.items
+      .map((it, i) => ({ ...it, category: cats[i] ?? it.category }))
+      .filter((_, i) => selected.has(i))
+    const card = state.cards.find((c) => c.id === cardId) ?? null
+    const ok = await run(
+      'confirm',
+      () =>
+        invoicesApi.import(
+          {
+            cardId: card?.id ?? null,
+            total: result.total,
+            fileName: result.fileName,
+            items: items.map((it) => ({
+              name: it.name,
+              category: it.category,
+              amount: it.amount,
+              date: it.date,
+              method: card ? { type: 'card', cardId: card.id } : { type: 'cash' },
+              source: 'fatura',
+            })),
+          },
+          card,
+          todayISO(),
+        ),
+      (r) => dispatch({ type: 'importInvoice', txs: r.transactions, card: r.card, invoice: r.invoice }),
+      (r) => `${r.transactions.length} ${r.transactions.length === 1 ? 'lançamento adicionado' : 'lançamentos adicionados'}`,
+      'Não deu para salvar os lançamentos. Tente de novo.',
+    )
+    if (ok) navigate('home')
+  }
+
+  const found = phase.name === 'found' ? phase.result : null
+  const progress = phase.name === 'reading' ? phase.progress : found ? 100 : 0
+  const fileName = phase.name === 'reading' ? phase.file.name : found?.fileName
+  const kind = phase.name === 'reading' ? (phase.file.type.startsWith('image/') ? 'Foto' : 'PDF') : found?.kind === 'photo' ? 'Foto' : 'PDF'
+  const selectedItems = found ? found.items.filter((_, i) => selected.has(i)) : []
+  const selectedTotal = selectedItems.reduce((s, it) => s + it.amount, 0)
+  const subs = found ? found.items.filter((i) => i.subscription).length : 0
+  // Importing twice for the same card in the same month would duplicate every purchase
+  const alreadyImported =
+    !!found &&
+    (state.invoices.some((i) => monthKey(i.importedAt) === currentMonth() && i.cardId === (cardId || null)) ||
+      state.transactions.some(
+        (t) => t.source === 'fatura' && monthKey(t.date) === currentMonth() && (cardId ? t.method.type === 'card' && t.method.cardId === cardId : t.method.type === 'cash'),
+      ))
+
+  return (
+    <div className="min-h-[calc(100dvh-var(--tabbar-space,0px))] bg-esk-bg-2">
+      <input ref={pdfInput} type="file" accept="application/pdf" className="hidden" onChange={(e) => { start(e.target.files?.[0]); e.target.value = '' }} />
+      <input ref={photoInput} type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => { start(e.target.files?.[0]); e.target.value = '' }} />
+      <Page>
+        <ScreenHeader
+          title="Importar fatura"
+          action={
+            <RoundButton label="Escolher PDF" onClick={() => pdfInput.current?.click()}>
+              <Asset name="c2640.svg" size={19} />
+            </RoundButton>
+          }
+        />
+
+        <div className="grid gap-x-12 md:grid-cols-2 md:pt-4 lg:gap-x-16">
+          <div className="flex flex-col">
+            <div className="pt-6">
+              {phase.name === 'pick' ? (
+                <FeatureCard>
+                  <div className="flex items-center justify-between font-sat text-[15px] font-medium">
+                    <span>PDF ou foto</span>
+                    <span>Okiva Plus</span>
+                  </div>
+                  <div>
+                    <p className="font-sat text-[15px] font-medium">Sua fatura vira lançamentos</p>
+                    <p className="pt-[6px] font-sat text-[34px] leading-[36px] font-medium tracking-[-1.36px]">Envie sua fatura</p>
+                    <p className="pt-3 font-sat text-[14px] font-medium opacity-70">A IA lê, categoriza e você confirma.</p>
+                  </div>
+                </FeatureCard>
+              ) : (
+                <FeatureCard>
+                  <div className="flex items-center justify-between font-sat text-[15px] font-medium">
+                    <span>{kind}</span>
+                    <span aria-live="polite">{progress}%</span>
+                  </div>
+                  <div>
+                    <p className="truncate font-sat text-[15px] font-medium">{fileName}</p>
+                    <p key={found ? 'done' : 'reading'} className="animate-rise pt-[6px] font-sat text-[34px] leading-[34px] font-medium tracking-[-1.36px]">
+                      {found ? 'Fatura lida' : (
+                        <>
+                          Lendo sua fatura
+                          <span className="animate-caret">…</span>
+                        </>
+                      )}
+                    </p>
+                    <ProgressBar value={progress} tone="ink" className="mt-[14px]" />
+                  </div>
+                </FeatureCard>
+              )}
+              {phase.name === 'reading' && (
+                <div className="pt-3">
+                  <LinkButton
+                    onClick={() => {
+                      abort.current?.abort()
+                      setPhase({ name: 'pick' })
+                    }}
+                  >
+                    Cancelar leitura
+                  </LinkButton>
+                </div>
+              )}
+            </div>
+
+            <div className="flex flex-col gap-[10px] pt-3">
+              <ActionRow
+                icon={<Asset name="f4010.svg" size={24} />}
+                label={phase.name === 'pick' ? 'Enviar PDF' : `Enviar outro ${kind === 'Foto' ? 'arquivo' : 'PDF'}`}
+                onClick={phase.name === 'pick' ? () => pdfInput.current?.click() : pickAgain}
+              />
+              {phase.name === 'pick' && (
+                <ActionRow icon={<Camera size={24} strokeWidth={1.8} className="text-esk-ink" />} label="Tirar foto da fatura" onClick={() => photoInput.current?.click()} />
+              )}
+            </div>
+            {error && <p role="alert" className="pt-4 font-sat text-[14px] text-esk-lilac">{error}</p>}
+          </div>
+
+          <div className="flex flex-col gap-[18px] pt-[42px] md:pt-6">
+            <SectionHeader title="Encontramos" />
+            <ListPanel>
+              <ListRow
+                icon={<Asset name="04670.svg" size={20} />}
+                title="Compras"
+                subtitle="Categorizadas com IA"
+                value={found ? <CountUp value={found.items.length} format={(n) => String(Math.round(n))} /> : <Skeleton active={phase.name === 'reading'} />}
+              />
+              <ListRow
+                icon={<Asset name="7f1c0.svg" size={20} />}
+                title="Assinaturas"
+                subtitle="Cobranças recorrentes"
+                value={found ? <CountUp value={subs} format={(n) => String(Math.round(n))} /> : <Skeleton active={phase.name === 'reading'} />}
+              />
+              <ListRow
+                icon={<Asset name="97e22.svg" size={20} />}
+                title="Total da fatura"
+                subtitle={found ? `Vence em ${found.dueInDays} dias` : phase.name === 'reading' ? 'Lendo com IA…' : 'Aguardando leitura'}
+                value={found ? <CountUp value={found.total} format={(n) => privateMoney(brlShort(Math.round(n)), hidden)} /> : <Skeleton active={phase.name === 'reading'} />}
+              />
+            </ListPanel>
+
+            {found && (
+              <div className="flex animate-rise flex-col gap-4 pt-4">
+                <div className="flex items-baseline justify-between">
+                  <h2 className="font-sat text-[17px] font-medium text-white">Confirme os lançamentos</h2>
+                  <LinkButton onClick={() => setSelected(selected.size === found.items.length ? new Set() : new Set(found.items.map((_, i) => i)))}>
+                    {selected.size === found.items.length ? 'Desmarcar todos' : 'Marcar todos'}
+                  </LinkButton>
+                </div>
+
+                {state.cards.length === 0 && (
+                  <p className="font-sat text-[13px] text-esk-subtle">Sem cartão cadastrado: os lançamentos entram como Dinheiro.</p>
+                )}
+                {state.cards.length > 0 && (
+                  <div className="flex flex-wrap gap-2" role="group" aria-label="Cartão da fatura">
+                    {state.cards.map((c) => (
+                      <Chip key={c.id} active={cardId === c.id} onClick={() => setCardId(c.id)}>
+                        {c.nickname} •• {c.last4}
+                      </Chip>
+                    ))}
+                  </div>
+                )}
+
+                <ul className="flex flex-col rounded-[26px] bg-esk-surface p-2">
+                  {(showAll ? found.items : found.items.slice(0, 8)).map((it, idx) => {
+                    const on = selected.has(idx)
+                    const category = cats[idx] ?? it.category
+                    return (
+                      <li key={idx} className="flex flex-col rounded-[18px] px-2 py-[10px] transition hover:bg-white/[0.03]">
+                        <button
+                          type="button"
+                          role="checkbox"
+                          aria-checked={on}
+                          onClick={() => {
+                            const next = new Set(selected)
+                            if (on) next.delete(idx)
+                            else next.add(idx)
+                            setSelected(next)
+                          }}
+                          className="flex w-full items-center gap-3 text-left"
+                        >
+                          <span className={cx('grid size-[22px] shrink-0 place-items-center rounded-[7px] transition duration-200', on ? 'animate-check-pop bg-esk-lime text-esk-ink' : 'ring-1 ring-esk-subtle')}>
+                            {on && <Check size={14} strokeWidth={2.4} className="animate-check-draw" />}
+                          </span>
+                          <span className="grid size-[36px] shrink-0 place-items-center rounded-full bg-esk-row">
+                            <CategoryRowIcon category={category} name={it.name} size={17} />
+                          </span>
+                          <span className="min-w-0 flex-1 truncate font-sat text-[15px] font-medium text-white">{it.name}</span>
+                          <span className="font-sat text-[15px] font-medium whitespace-nowrap text-white">− {privateMoney(brl(it.amount), hidden)}</span>
+                        </button>
+                        <div className="flex items-center gap-2 pt-1 pl-[70px]">
+                          <select
+                            aria-label={`Categoria de ${it.name}`}
+                            value={category}
+                            onChange={(e) => setCats((c) => ({ ...c, [idx]: e.target.value as CategoryId }))}
+                            className="cursor-pointer rounded-[10px] bg-transparent py-1 font-sat text-[12px] text-esk-subtle outline-none hover:text-white focus:text-white"
+                          >
+                            {categoryIds(state).map((c) => (
+                              <option key={c} value={c} className="bg-esk-elevated text-white">
+                                {categoryMeta(state, c).label}
+                              </option>
+                            ))}
+                          </select>
+                          {cats[idx] && <span className="font-sat text-[12px] text-esk-lime-soft">ajustado</span>}
+                          {it.subscription && <span className="font-sat text-[12px] text-esk-subtle">· recorrente</span>}
+                        </div>
+                      </li>
+                    )
+                  })}
+                </ul>
+                {found.items.length > 8 && (
+                  <LinkButton onClick={() => setShowAll((v) => !v)}>{showAll ? 'Mostrar menos' : `Ver mais (${found.items.length - 8})`}</LinkButton>
+                )}
+
+                {alreadyImported && (
+                  <p role="status" className="animate-rise rounded-[18px] bg-esk-elevated px-4 py-3 font-sat text-[13px] leading-[1.4] text-esk-lilac ring-1 ring-esk-track">
+                    Você já importou uma fatura {cardId ? 'deste cartão' : 'sem cartão'} este mês. Confirmar de novo duplica os lançamentos.
+                  </p>
+                )}
+                <PrimaryButton disabled={selected.size === 0} onClick={confirm} loading={pending === 'confirm'} loadingText="Salvando lançamentos…">
+                  Confirmar {selected.size} {selected.size === 1 ? 'lançamento' : 'lançamentos'} · {privateMoney(brl(selectedTotal), hidden)}
+                </PrimaryButton>
+              </div>
+            )}
+          </div>
+        </div>
+      </Page>
+    </div>
+  )
+}
+
+function Skeleton({ active }: { active: boolean }) {
+  return <span className={cx('inline-block h-[14px] w-[44px] rounded-[7px]', active ? 'skeleton-shimmer animate-shimmer' : 'bg-esk-track')} aria-label={active ? 'Carregando' : 'Aguardando'} />
+}

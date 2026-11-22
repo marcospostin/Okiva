@@ -1,0 +1,10 @@
+{
+  "description": "Gerencie gastos, cartões e metas financeiras em um só lugar, com registro manual e insights de IA para entender faturas e planejar conquistas.",
+  "robots": {
+    "index": false
+  },
+  "accessibility": {
+    "addBypassLinks": false,
+    "ignoreReducedMotion": false
+  }
+}

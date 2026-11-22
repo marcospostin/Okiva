@@ -1,0 +1,185 @@
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import type { CategoryId } from '../types'
+
+export type View = 'home' | 'cards' | 'goals' | 'invoice' | 'assistant'
+
+export type SheetState =
+  | { type: 'add' }
+  | { type: 'edit'; id: string }
+  | { type: 'tx'; id: string }
+  | { type: 'card'; id?: string }
+  | { type: 'save'; goalId: string }
+  | { type: 'goal'; id?: string }
+  | { type: 'budget'; category?: CategoryId }
+  | { type: 'cap' }
+  | { type: 'balance' }
+  | { type: 'account' }
+  /** Name / e-mail of the account, and account deletion */
+  | { type: 'profile' }
+  /** One deposit of a goal: edit amount/date or delete */
+  | { type: 'deposit'; id: string }
+  /** Categories the person created */
+  | { type: 'categories' }
+  /** Create (no id) or edit/delete a custom category */
+  | { type: 'category'; id?: string }
+  /** An imported invoice: details, its expenses, undo */
+  | { type: 'invoiceImport'; id: string }
+  /** Okiva Plus upsell: opened from AI entry points while the account is in manual mode */
+  | { type: 'plus'; then?: View }
+
+export type ToastTone = 'success' | 'error' | 'info'
+
+export interface Toast {
+  id: number
+  message: string
+  tone: ToastTone
+  leaving: boolean
+}
+
+interface UIValue {
+  view: View
+  canGoBack: boolean
+  /** Last navigation direction, drives the screen enter animation */
+  direction: 'forward' | 'back'
+  navigate: (v: View) => void
+  /** Bottom tab bar: tabs replace each other instead of piling up in the back stack */
+  switchTab: (v: View) => void
+  back: () => void
+  sheet: SheetState | null
+  /** True while the sheet plays its exit animation */
+  sheetClosing: boolean
+  openSheet: (s: SheetState) => void
+  closeSheet: () => void
+  toast: Toast | null
+  notify: (message: string, tone?: ToastTone) => void
+}
+
+const UIContext = createContext<UIValue | null>(null)
+
+const SHEET_EXIT_MS = 200
+const TOAST_MS = 2800
+const TOAST_EXIT_MS = 180
+
+/**
+ * View stack + sheets. Few full screens; everything else is a sheet on top.
+ * The stack is mirrored in browser history so the device back button works.
+ */
+export function UIProvider({ children }: { children: ReactNode }) {
+  const [stack, setStack] = useState<View[]>(['home'])
+  const [direction, setDirection] = useState<'forward' | 'back'>('forward')
+  const [sheet, setSheet] = useState<SheetState | null>(null)
+  const [sheetClosing, setSheetClosing] = useState(false)
+  const [toast, setToast] = useState<Toast | null>(null)
+  const toastTimer = useRef<number | undefined>(undefined)
+  const sheetTimer = useRef<number | undefined>(undefined)
+  const stackRef = useRef(stack)
+  stackRef.current = stack
+
+  const dropSheet = useCallback(() => {
+    window.clearTimeout(sheetTimer.current)
+    setSheetClosing(false)
+    setSheet(null)
+  }, [])
+
+  useEffect(() => {
+    history.replaceState({ depth: 0 }, '')
+    const onPop = (e: PopStateEvent) => {
+      const depth = (e.state?.depth as number | undefined) ?? 0
+      dropSheet()
+      setDirection('back')
+      setStack((s) => s.slice(0, depth + 1))
+    }
+    window.addEventListener('popstate', onPop)
+    return () => window.removeEventListener('popstate', onPop)
+  }, [dropSheet])
+
+  const navigate = useCallback(
+    (v: View) => {
+      const s = stackRef.current
+      dropSheet()
+      window.scrollTo({ top: 0 })
+      if (v === 'home') {
+        setDirection('back')
+        if (s.length > 1) history.go(-(s.length - 1))
+        setStack(['home'])
+        return
+      }
+      if (s[s.length - 1] === v) return
+      const next = [...s, v]
+      history.pushState({ depth: next.length - 1 }, '')
+      setDirection('forward')
+      setStack(next)
+    },
+    [dropSheet],
+  )
+
+  const switchTab = useCallback(
+    (v: View) => {
+      const s = stackRef.current
+      if (v === 'home' || s.length === 1) return navigate(v)
+      if (s[s.length - 1] === v) return
+      dropSheet()
+      window.scrollTo({ top: 0 })
+      // Home stays at the bottom of the stack, the tab takes the place of the current screen
+      if (s.length > 2) history.go(-(s.length - 2))
+      else history.replaceState({ depth: 1 }, '')
+      setDirection('forward')
+      setStack(['home', v])
+    },
+    [navigate, dropSheet],
+  )
+
+  const back = useCallback(() => {
+    if (stackRef.current.length > 1) history.back()
+  }, [])
+
+  const openSheet = useCallback((s: SheetState) => {
+    window.clearTimeout(sheetTimer.current)
+    setSheetClosing(false)
+    setSheet(s)
+  }, [])
+
+  const closeSheet = useCallback(() => {
+    window.clearTimeout(sheetTimer.current)
+    setSheetClosing(true)
+    sheetTimer.current = window.setTimeout(() => {
+      setSheet(null)
+      setSheetClosing(false)
+    }, SHEET_EXIT_MS)
+  }, [])
+
+  const notify = useCallback((message: string, tone: ToastTone = 'success') => {
+    window.clearTimeout(toastTimer.current)
+    const id = Date.now()
+    setToast({ id, message, tone, leaving: false })
+    toastTimer.current = window.setTimeout(() => {
+      setToast((t) => (t && t.id === id ? { ...t, leaving: true } : t))
+      toastTimer.current = window.setTimeout(() => setToast((t) => (t && t.id === id ? null : t)), TOAST_EXIT_MS)
+    }, tone === 'error' ? TOAST_MS + 1200 : TOAST_MS)
+  }, [])
+
+  const value = useMemo<UIValue>(
+    () => ({
+      view: stack[stack.length - 1],
+      canGoBack: stack.length > 1,
+      direction,
+      navigate,
+      switchTab,
+      back,
+      sheet,
+      sheetClosing,
+      openSheet,
+      closeSheet,
+      toast,
+      notify,
+    }),
+    [stack, direction, sheet, sheetClosing, toast, navigate, switchTab, back, openSheet, closeSheet, notify],
+  )
+  return <UIContext.Provider value={value}>{children}</UIContext.Provider>
+}
+
+export function useUI() {
+  const ctx = useContext(UIContext)
+  if (!ctx) throw new Error('useUI must be used inside UIProvider')
+  return ctx
+}

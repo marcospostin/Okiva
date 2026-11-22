@@ -1,0 +1,353 @@
+@import url('https://api.fontshare.com/v2/css?f[]=satoshi@400,500,700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500&display=swap');
+@import 'tailwindcss';
+
+/* Inter faces resolved from the Figma design (Home) */
+@font-face {
+  font-family: 'Inter:Regular';
+  src: url('https://static.figma.com/font/Inter_1') format('woff2');
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Inter:Medium';
+  src: url('https://static.figma.com/font/Inter_1') format('woff2');
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Inter:Semi Bold';
+  src: url('https://static.figma.com/font/Inter_1') format('woff2');
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+}
+
+/*
+ * Okiva design tokens. Every token is exposed as a CSS variable (--color-esk-*)
+ * and as a Tailwind utility (bg-esk-lime, text-esk-muted, ...).
+ */
+@theme {
+  --breakpoint-md: 50rem; /* 800px  - tablet / small desktop */
+  --breakpoint-lg: 68.75rem; /* 1100px - desktop */
+  --breakpoint-xl: 90rem; /* 1440px */
+  --breakpoint-3xl: 120rem; /* 1920px - Full HD (4K scales from here) */
+
+  --color-esk-bg: #030303;
+  --color-esk-bg-2: #0a0a0c;
+  --color-esk-surface: #151518;
+  --color-esk-elevated: #18181b;
+  --color-esk-tile: #1c1c1c;
+  --color-esk-control: #1a1a1d;
+  --color-esk-row: #242428;
+  --color-esk-border: #1c1c1f;
+  --color-esk-track: #26262a;
+  --color-esk-text: #ffffff;
+  --color-esk-text-2: #f2f2f2;
+  --color-esk-muted: #9a9a9a;
+  --color-esk-subtle: #85858a;
+  --color-esk-lime: #e5ffb5;
+  --color-esk-lime-soft: #eafebd;
+  --color-esk-lilac: #d8ccfa;
+  --color-esk-lilac-strong: #bfa9fe;
+  --color-esk-lilac-card: #bbaaf8;
+  --color-esk-offwhite: #f1f1ee;
+  --color-esk-ink: #0a0a0a;
+  --color-esk-ink-2: #333333;
+
+  --font-sans: 'Satoshi', 'Inter:Regular', ui-sans-serif, system-ui, sans-serif;
+  --font-sat: 'Satoshi', 'Inter:Regular', ui-sans-serif, system-ui, sans-serif;
+  --font-inter: 'Inter:Regular', ui-sans-serif, system-ui, sans-serif;
+  --font-inter-m: 'Inter:Medium', ui-sans-serif, system-ui, sans-serif;
+  --font-inter-sb: 'Inter:Semi Bold', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
+
+  --animate-sheet-up: sheet-up 340ms cubic-bezier(0.2, 0.9, 0.25, 1);
+  --animate-sheet-down: sheet-down 200ms cubic-bezier(0.4, 0, 1, 1) forwards;
+  --animate-sheet-content: sheet-content 380ms cubic-bezier(0.2, 0.8, 0.2, 1) 60ms both;
+  --animate-pop-in: pop-in 260ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  --animate-pop-out: pop-out 180ms ease-in forwards;
+  --animate-fade-in: fade-in 220ms ease-out;
+  --animate-fade-out: fade-out 200ms ease-in forwards;
+  --animate-rise: rise 420ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  --animate-screen-forward: screen-forward 360ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  --animate-screen-back: screen-back 360ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  --animate-toast-in: toast-in 420ms cubic-bezier(0.3, 1.3, 0.5, 1) both;
+  --animate-toast-out: toast-out 180ms ease-in forwards;
+  --animate-check-draw: check-draw 420ms ease-out 120ms both;
+  --animate-msg-user: msg-user 340ms cubic-bezier(0.2, 0.9, 0.3, 1.1) both;
+  --animate-msg-bot: msg-bot 380ms cubic-bezier(0.2, 0.9, 0.3, 1.1) both;
+  --animate-insight: insight 560ms cubic-bezier(0.2, 0.9, 0.3, 1.15) both;
+  --animate-typing: typing 1.2s ease-in-out infinite;
+  --animate-shimmer: shimmer 1.4s linear infinite;
+  --animate-check-pop: check-pop 260ms cubic-bezier(0.3, 1.6, 0.5, 1);
+  --animate-glow: glow 2.4s ease-in-out infinite;
+  --animate-caret: caret 1s steps(1) infinite;
+
+  @keyframes sheet-down {
+    from {
+      transform: translateY(0);
+    }
+    to {
+      transform: translateY(100%);
+    }
+  }
+  @keyframes sheet-content {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+  @keyframes pop-out {
+    to {
+      opacity: 0;
+      transform: translateY(8px) scale(0.98);
+    }
+  }
+  @keyframes fade-out {
+    to {
+      opacity: 0;
+    }
+  }
+  @keyframes screen-forward {
+    from {
+      opacity: 0;
+      transform: translateX(18px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+  @keyframes screen-back {
+    from {
+      opacity: 0;
+      transform: translateX(-18px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+  @keyframes toast-in {
+    from {
+      opacity: 0;
+      transform: translateY(16px) scale(0.94);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+  @keyframes toast-out {
+    to {
+      opacity: 0;
+      transform: translateY(10px) scale(0.97);
+    }
+  }
+  @keyframes check-draw {
+    from {
+      opacity: 0;
+      transform: scale(0.4) rotate(-20deg);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+  @keyframes msg-user {
+    from {
+      opacity: 0;
+      transform: translate(14px, 8px) scale(0.96);
+      transform-origin: bottom right;
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+  @keyframes msg-bot {
+    from {
+      opacity: 0;
+      transform: translate(-14px, 8px) scale(0.96);
+      transform-origin: bottom left;
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+  @keyframes insight {
+    from {
+      opacity: 0;
+      transform: translateY(14px) scale(0.94);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+  @keyframes typing {
+    0%,
+    60%,
+    100% {
+      opacity: 0.35;
+      transform: translateY(0);
+    }
+    30% {
+      opacity: 1;
+      transform: translateY(-4px);
+    }
+  }
+  @keyframes shimmer {
+    from {
+      background-position: -200% 0;
+    }
+    to {
+      background-position: 200% 0;
+    }
+  }
+  @keyframes check-pop {
+    0% {
+      transform: scale(0.6);
+    }
+    100% {
+      transform: scale(1);
+    }
+  }
+  @keyframes glow {
+    0%,
+    100% {
+      box-shadow: 0 0 0 0 rgba(229, 255, 181, 0);
+    }
+    50% {
+      box-shadow: 0 0 0 6px rgba(229, 255, 181, 0.12);
+    }
+  }
+  @keyframes caret {
+    50% {
+      opacity: 0;
+    }
+  }
+
+  @keyframes sheet-up {
+    from {
+      transform: translateY(100%);
+    }
+    to {
+      transform: translateY(0);
+    }
+  }
+  @keyframes pop-in {
+    from {
+      opacity: 0;
+      transform: translateY(12px) scale(0.98);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+  @keyframes rise {
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+}
+
+:root {
+  --esk-gradient-hero: linear-gradient(146.88deg, #bfa9fe 14.286%, #d8ccfa 41.429%, #e5ffb5 85.714%);
+  --esk-gradient-feature: linear-gradient(140.23deg, #bbaaf8 4.8%, #d6ccf7 39.15%, #eafebd 95.2%);
+  --esk-gradient-wallet: linear-gradient(143.19deg, #d6ccf7 4.8%, #eafebd 60.85%);
+  --esk-gradient-insight: linear-gradient(153.75deg, #bbaaf8 4.8%, #d6ccf7 39.15%, #eafebd 95.2%);
+  /* Agente button in the bottom tab bar (Figma "Ação principal / Agente") */
+  --esk-gradient-agent: linear-gradient(121deg, #bbc0ef 7.38%, #e9ffd9 36.07%, #ffe9ea 66.8%, #bbc0ef 92.62%);
+}
+
+/* Space the bottom tab bar takes on small screens: 76px bar + 12px bottom gap + 12px air.
+   Screens pad their bottom with it, the chat composer and toasts sit above it. */
+.tabbar-space {
+  --tabbar-space: 0px;
+}
+@media (max-width: 767.98px) {
+  .tabbar-space {
+    --tabbar-space: calc(100px + env(safe-area-inset-bottom));
+  }
+}
+
+@layer base {
+  html {
+    background: #030303;
+    color-scheme: dark;
+    -webkit-tap-highlight-color: transparent;
+  }
+  body {
+    font-family: var(--font-sans);
+    color: #fff;
+    -webkit-font-smoothing: antialiased;
+  }
+  :focus-visible {
+    outline: 2px solid #e5ffb5;
+    outline-offset: 2px;
+  }
+  input[type='date']::-webkit-calendar-picker-indicator {
+    filter: invert(1);
+    opacity: 0.6;
+  }
+}
+
+/* 4K / QHD: scale the Full HD layout so density stays the same on big screens. */
+@media (min-width: 2560px) {
+  html {
+    zoom: 1.3333;
+  }
+}
+@media (min-width: 3840px) {
+  html {
+    zoom: 2;
+  }
+}
+
+/* Category bar segments grow from the left on screen enter. */
+@keyframes grow-x {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+/* Loading placeholder with a moving highlight. Use together with `animate-shimmer`. */
+.skeleton-shimmer {
+  background: linear-gradient(90deg, #1c1c1f 0%, #2a2a2f 50%, #1c1c1f 100%);
+  background-size: 200% 100%;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    transition-duration: 1ms !important;
+  }
+}
