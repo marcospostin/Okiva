@@ -1,0 +1,67 @@
+<!-- Okiva · e-mail de confirmação de cadastro
+     Assunto: Confirme seu e-mail no Okiva
+     Onde colar: Supabase → Authentication → Emails → Templates → "Confirm signup" (Message body / Source)
+     Variáveis do Supabase usadas: {{ .ConfirmationURL }} e {{ .Email }} -->
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="dark light" />
+    <title>Confirme seu e-mail no Okiva</title>
+  </head>
+  <body style="margin:0;padding:0;background-color:#0a0a0c;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#0a0a0c;">
+      <tr>
+        <td align="center" style="padding:40px 16px;">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:480px;background-color:#151518;border-radius:24px;">
+            <tr>
+              <td style="padding:36px 32px 8px 32px;font-family:Arial,Helvetica,sans-serif;">
+                <p style="margin:0;font-size:26px;line-height:1;font-weight:bold;letter-spacing:-0.6px;color:#e5ffb5;">Okiva</p>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:24px 32px 0 32px;font-family:Arial,Helvetica,sans-serif;">
+                <h1 style="margin:0;font-size:24px;line-height:1.25;font-weight:600;color:#ffffff;">Confirme seu e-mail</h1>
+                <p style="margin:12px 0 0 0;font-size:15px;line-height:1.55;color:#9a9a9a;">
+                  Falta só um passo para começar a registrar seus gastos e guardar para o que importa.
+                  Toque no botão abaixo para ativar sua conta.
+                </p>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:28px 32px 0 32px;">
+                <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                  <tr>
+                    <td align="center" style="border-radius:18px;background-color:#e5ffb5;">
+                      <a href="{{ .ConfirmationURL }}" target="_blank"
+                         style="display:inline-block;padding:15px 28px;font-family:Arial,Helvetica,sans-serif;font-size:16px;font-weight:bold;color:#0a0a0a;text-decoration:none;border-radius:18px;">
+                        Confirmar e-mail
+                      </a>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:28px 32px 0 32px;font-family:Arial,Helvetica,sans-serif;">
+                <p style="margin:0;font-size:13px;line-height:1.55;color:#85858a;">
+                  Se o botão não funcionar, copie e cole este link no navegador:<br />
+                  <a href="{{ .ConfirmationURL }}" target="_blank" style="color:#d8ccfa;word-break:break-all;">{{ .ConfirmationURL }}</a>
+                </p>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:28px 32px 36px 32px;font-family:Arial,Helvetica,sans-serif;">
+                <p style="margin:0;padding-top:20px;border-top:1px solid #26262a;font-size:12px;line-height:1.55;color:#85858a;">
+                  Você recebeu este e-mail porque {{ .Email }} foi usado para criar uma conta no Okiva.
+                  Se não foi você, é só ignorar: nenhuma conta será ativada.
+                </p>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>

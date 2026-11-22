@@ -28,8 +28,11 @@ function initialMode(): Mode {
 export default function Login() {
   const [mode, setMode] = useState<Mode>(initialMode)
   return (
-    <div className="grid min-h-dvh bg-esk-bg md:grid-cols-2">
-      <div className="hidden p-6 md:block lg:p-10">
+    // Desktop: form in a fixed column (400px form + 96px air each side) and the hero card
+    // takes the rest, with the same 48px margin on its outer sides. Keeps card→form and
+    // form→edge distances equal instead of a huge gap in the middle.
+    <div className="grid min-h-dvh bg-esk-bg md:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_592px] 3xl:grid-cols-[minmax(0,1fr)_656px]">
+      <div className="hidden p-6 md:block lg:p-12 lg:pr-0">
         <div className="flex h-full flex-col justify-between rounded-[34px] p-10 text-esk-ink lg:p-14" style={{ backgroundImage: 'var(--esk-gradient-hero)' }}>
           <p className="font-sat text-[44px] leading-none font-bold tracking-[-1.4px] 3xl:text-[56px]">Okiva</p>
           <div>
@@ -43,7 +46,7 @@ export default function Login() {
         </div>
       </div>
 
-      <div className="flex flex-col justify-center px-[32px] py-12 md:px-14 lg:px-24">
+      <div className="flex flex-col justify-center px-[32px] py-12 md:px-12 lg:px-24 3xl:px-32">
         <div className="mx-auto w-full max-w-[400px]">
           <p className="font-sat text-[34px] leading-none font-bold tracking-[-1px] text-esk-lime md:hidden">Okiva</p>
           {mode === 'login' ? <LoginForm onSwitch={() => setMode('signup')} /> : <SignupForm onSwitch={() => setMode('login')} />}
@@ -94,7 +97,6 @@ function RememberMe({ checked, onChange }: { checked: boolean; onChange: (v: boo
 const REAL_AUTH = USE_SUPABASE
 const freeNote = REAL_AUTH ? '' : 'Protótipo: nenhum campo é obrigatório.'
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-const MIN_PASSWORD = 6
 
 function FormError({ message }: { message?: string }) {
   if (!message) return null
@@ -105,16 +107,109 @@ function FormError({ message }: { message?: string }) {
   )
 }
 
+/* ------------------------------------------------------------ força da senha */
+
+/**
+ * Regras exibidas ao digitar a senha no cadastro. Obrigatórias: tamanho, maiúscula,
+ * minúscula e número. Símbolo é recomendado (conta para "Forte"). Segue as boas
+ * práticas atuais: comprimento pesa mais que complexidade, colar senha é permitido
+ * e o retorno aparece enquanto a pessoa digita.
+ */
+const PASSWORD_RULES = [
+  { id: 'length', label: 'Pelo menos 8 caracteres', test: (p: string) => p.length >= 8, required: true },
+  { id: 'upper', label: 'Uma letra maiúscula', test: (p: string) => /[A-ZÀ-Ý]/.test(p), required: true },
+  { id: 'lower', label: 'Uma letra minúscula', test: (p: string) => /[a-zß-ÿ]/.test(p), required: true },
+  { id: 'number', label: 'Um número', test: (p: string) => /\d/.test(p), required: true },
+  { id: 'symbol', label: 'Um símbolo (recomendado)', test: (p: string) => /[^A-Za-zÀ-ÿ0-9\s]/.test(p), required: false },
+] as const
+
+/** Senhas óbvias ficam sempre como "Fraca", mesmo cumprindo as regras. */
+const WEAK_PATTERN = /(123456|654321|abcdef|qwerty|senha|password|okiva|(.)\2{3,})/i
+
+const STRENGTH = [
+  { label: 'Muito fraca', color: '#f08a8a' },
+  { label: 'Fraca', color: '#f08a8a' },
+  { label: 'Média', color: '#f6dca4' },
+  { label: 'Boa', color: '#d6e6c4' },
+  { label: 'Forte', color: 'var(--color-esk-lime)' },
+] as const
+
+export function passwordMeetsRules(p: string) {
+  return PASSWORD_RULES.every((r) => !r.required || r.test(p))
+}
+
+function passwordScore(p: string) {
+  if (!p) return 0
+  const classes = [/[A-ZÀ-Ý]/, /[a-zß-ÿ]/, /\d/, /[^A-Za-zÀ-ÿ0-9\s]/].filter((re) => re.test(p)).length
+  let score = 0
+  if (p.length >= 8) score++
+  if (p.length >= 12) score++
+  if (classes >= 3) score++
+  if (classes === 4) score++
+  if (WEAK_PATTERN.test(p)) score = Math.min(score, 1)
+  // "Forte" exige cumprir as regras obrigatórias
+  if (!passwordMeetsRules(p)) score = Math.min(score, 2)
+  return score
+}
+
+function PasswordStrength({ id, password }: { id: string; password: string }) {
+  if (!password) return null
+  const score = passwordScore(password)
+  const level = STRENGTH[score]
+  return (
+    <div id={id} className="flex animate-rise flex-col gap-3 pt-1">
+      <div className="flex items-center gap-3">
+        <div className="grid flex-1 grid-cols-4 gap-1" aria-hidden>
+          {[1, 2, 3, 4].map((i) => (
+            <span
+              key={i}
+              className="h-[4px] rounded-full transition-colors duration-300"
+              style={{ backgroundColor: i <= Math.max(score, 1) ? level.color : 'var(--color-esk-track)' }}
+            />
+          ))}
+        </div>
+        <span className="min-w-[72px] text-right font-sat text-[12px] font-medium" style={{ color: level.color }} aria-live="polite">
+          {level.label}
+        </span>
+      </div>
+      <ul className="grid gap-[6px] sm:grid-cols-2" aria-label="Requisitos da senha">
+        {PASSWORD_RULES.map((r) => {
+          const ok = r.test(password)
+          return (
+            <li key={r.id} className={cx('flex items-center gap-2 font-sat text-[12px] transition-colors', ok ? 'text-esk-lime-soft' : 'text-esk-subtle')}>
+              <span
+                className={cx(
+                  'grid size-[16px] shrink-0 place-items-center rounded-full transition',
+                  ok ? 'bg-esk-lime text-esk-ink' : 'ring-1 ring-esk-track',
+                )}
+                aria-hidden
+              >
+                {ok && <Check size={11} strokeWidth={3} />}
+              </span>
+              <span>
+                {r.label}
+                <span className="sr-only">{ok ? ' (ok)' : ' (pendente)'}</span>
+              </span>
+            </li>
+          )
+        })}
+      </ul>
+    </div>
+  )
+}
+
 function PasswordInput({
   id,
   autoComplete,
   value,
   onChange,
+  describedBy,
 }: {
   id: string
   autoComplete: string
   value: string
   onChange: (value: string) => void
+  describedBy?: string
 }) {
   const [visible, setVisible] = useState(false)
   return (
@@ -126,6 +221,7 @@ function PasswordInput({
         className={cx(inputClass, 'pr-12')}
         value={value}
         onChange={(e) => onChange(e.target.value)}
+        aria-describedby={describedBy}
       />
       <button
         type="button"
@@ -269,7 +365,7 @@ function SignupForm({ onSwitch }: { onSwitch: () => void }) {
   const errors = REAL_AUTH
     ? {
         email: !email.trim() ? 'Digite seu e-mail.' : !EMAIL_RE.test(email.trim()) ? 'Confira o e-mail.' : undefined,
-        password: password.length < MIN_PASSWORD ? `Use pelo menos ${MIN_PASSWORD} caracteres.` : undefined,
+        password: !password ? 'Crie uma senha.' : !passwordMeetsRules(password) ? 'A senha ainda não atende aos requisitos abaixo.' : undefined,
         confirm: confirmPassword !== password ? 'As senhas não são iguais.' : undefined,
       }
     : {}
@@ -350,7 +446,8 @@ function SignupForm({ onSwitch }: { onSwitch: () => void }) {
           <input id="email" type="email" autoComplete="email" className={inputClass} placeholder="voce@email.com" value={email} onChange={(e) => setEmail(e.target.value)} />
         </Field>
         <Field label="Senha" htmlFor="password" error={show(errors.password)} attempt={tries}>
-          <PasswordInput id="password" autoComplete="new-password" value={password} onChange={setPassword} />
+          <PasswordInput id="password" autoComplete="new-password" value={password} onChange={setPassword} describedBy={REAL_AUTH ? 'password-strength' : undefined} />
+          {REAL_AUTH && <PasswordStrength id="password-strength" password={password} />}
         </Field>
         <Field label="Confirmar senha" htmlFor="confirm-password" error={show(errors.confirm)} attempt={tries}>
           <PasswordInput id="confirm-password" autoComplete="new-password" value={confirmPassword} onChange={setConfirmPassword} />

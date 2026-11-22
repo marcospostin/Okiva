@@ -18,9 +18,12 @@ const Invoice = lazy(() => import('./screens/Invoice'))
 const Assistant = lazy(loadAssistant)
 const SheetHost = lazy(loadSheets)
 
+/** Chegou pelo link do e-mail de confirmação (lido antes de o Supabase limpar a URL). */
+const FROM_CONFIRMATION_LINK = typeof window !== 'undefined' && /type=(signup|email)|[?&]code=/.test(window.location.hash + window.location.search)
+
 function Screen() {
   const { state, dispatch } = useStore()
-  const { view, navigate, sheet, direction } = useUI()
+  const { view, navigate, sheet, direction, notify } = useUI()
   const plusOnly = view === 'invoice' || view === 'assistant'
   const signedIn = !!state.user
   // Supabase: confere a sessão salva (ou o link de confirmação) antes de mostrar o login
@@ -31,7 +34,9 @@ function Screen() {
     let alive = true
     restoreSupabaseSession()
       .then((account) => {
-        if (alive && account) dispatch({ type: 'hydrate', state: account })
+        if (!alive || !account) return
+        dispatch({ type: 'hydrate', state: account })
+        if (FROM_CONFIRMATION_LINK) notify('E-mail confirmado. Bem-vindo ao Okiva!')
       })
       .finally(() => alive && setBooting(false))
     const stop = onSignedOut(() => dispatch({ type: 'logout' }))
@@ -39,7 +44,7 @@ function Screen() {
       alive = false
       stop()
     }
-  }, [dispatch])
+  }, [dispatch, notify])
 
   // Stage 1 has no AI screens
   useEffect(() => {

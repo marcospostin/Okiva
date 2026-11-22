@@ -74,7 +74,7 @@ async function supabaseSignIn(input: { email: string; password: string; remember
   setRemember(input.remember)
   const { error } = await sb().auth.signInWithPassword({ email: normalize(input.email), password: input.password })
   if (error) throw authError(error)
-  const state = await loadAccount()
+  const state = await applyPendingAvatar(await loadAccount())
   return { user: state.user!, state }
 }
 
@@ -84,17 +84,55 @@ async function supabaseSignUp(input: { name: string; email: string; password: st
   const { data, error } = await sb().auth.signUp({
     email,
     password: input.password,
-    options: { data: { name: input.name.trim() || nameFromEmail(email) }, emailRedirectTo: window.location.origin },
+    options: {
+      // O trigger do banco cria o profile com nome e saldo inicial (funciona com ou sem confirmação de e-mail)
+      data: { name: input.name.trim() || nameFromEmail(email), balance: input.balance > 0 ? input.balance.toFixed(2) : undefined },
+      emailRedirectTo: window.location.origin,
+    },
   })
   if (error) throw authError(error)
   // E-mail já cadastrado: o Supabase devolve um usuário sem identidades (proteção contra enumeração)
   if (data.user && data.user.identities?.length === 0) throw authError({ message: 'already registered' })
-  // Projeto exige confirmação de e-mail: a conta só abre depois do link
-  if (!data.session) return { confirmEmail: email }
-  if (input.balance > 0) await sbAccountApi.setBalance(input.balance)
+  // Projeto exige confirmação de e-mail: a conta só abre depois do link.
+  // A foto espera neste navegador e é enviada no primeiro login.
+  if (!data.session) {
+    if (input.avatar) savePendingAvatar(email, input.avatar)
+    return { confirmEmail: email }
+  }
   if (input.avatar) await sbAccountApi.updateProfile({ avatar: input.avatar }).catch(() => undefined)
   const state = await loadAccount()
   return { user: state.user!, state }
+}
+
+/* Foto escolhida no cadastro, guardada até a conta ser confirmada */
+const pendingAvatarKey = (email: string) => `okiva:pending-avatar:${normalize(email)}`
+
+function savePendingAvatar(email: string, avatar: string) {
+  try {
+    localStorage.setItem(pendingAvatarKey(email), avatar)
+  } catch {
+    /* storage cheio ou indisponível: a pessoa troca a foto depois na Conta */
+  }
+}
+
+/** Envia a foto pendente do cadastro (se houver) e devolve a conta atualizada. */
+async function applyPendingAvatar(state: AppState): Promise<AppState> {
+  const email = state.user?.email
+  if (!email || state.user?.avatar) return state
+  let avatar: string | null = null
+  try {
+    avatar = localStorage.getItem(pendingAvatarKey(email))
+  } catch {
+    return state
+  }
+  if (!avatar) return state
+  try {
+    const patch = await sbAccountApi.updateProfile({ avatar })
+    localStorage.removeItem(pendingAvatarKey(email))
+    return { ...state, user: { ...state.user!, avatar: patch.avatar } }
+  } catch {
+    return state
+  }
 }
 
 /**
@@ -133,7 +171,7 @@ export async function restoreSupabaseSession(): Promise<AppState | null> {
   const { data } = await sb().auth.getSession()
   if (!data.session) return null
   try {
-    return await loadAccount()
+    return await applyPendingAvatar(await loadAccount())
   } catch {
     await sb().auth.signOut({ scope: 'local' })
     return null

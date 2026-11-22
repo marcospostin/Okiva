@@ -64,6 +64,31 @@ update auth.users
  where email = 'lucas@okiva.app';
 ```
 
+### Cadastro: senha e confirmação de e-mail
+
+**Regras de senha (no app):** ao digitar, o cadastro mostra a barra de força e a lista de requisitos.
+Obrigatórios: 8+ caracteres, maiúscula, minúscula e número. Símbolo é recomendado (necessário para "Forte").
+Senhas com sequências óbvias (123456, abcdef, "senha", caractere repetido) ficam sempre como "Fraca".
+
+Para o servidor exigir o mesmo (recomendado), em **Authentication → Sign In / Providers → Email**:
+- *Minimum password length*: **8**
+- *Password requirements*: **Lowercase, uppercase letters and digits**
+- (opcional) ligar **Leaked password protection**
+
+**Confirmação de e-mail:**
+1. **Authentication → Sign In / Providers → Email**: ligue **Confirm email**.
+2. **Authentication → Emails → Templates → Confirm signup**:
+   - *Subject*: `Confirme seu e-mail no Okiva`
+   - *Message body*: cole o conteúdo de `supabase/templates/confirmacao-cadastro.html`
+3. **Authentication → URL Configuration**: Site URL e Redirect URLs com o domínio da Vercel (já feito).
+
+Fluxo no app: depois do cadastro aparece "Confirme seu e-mail"; o link do e-mail volta para o site já logado,
+com o aviso "E-mail confirmado". Nome e saldo inicial vão no metadata do cadastro e o banco cria o perfil com eles
+(migration `20261122193349_okiva_signup_metadata.sql`); a foto espera no navegador e é enviada no primeiro login.
+
+> O envio padrão do Supabase tem limite baixo (poucos e-mails por hora) e é só para testes.
+> Para uso real, configure um SMTP próprio (ex.: Resend, Brevo) em **Authentication → Emails → SMTP Settings**.
+
 ### Demonstração para visitantes (portfólio)
 
 Botão **"Ver demonstração"** no login: cada visitante recebe uma conta **anônima e temporária só dele**, já com os dados de exemplo do Lucas.

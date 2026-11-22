@@ -536,7 +536,8 @@ export function PrimaryButton({
       {...rest}
     >
       {loading && <Spinner />}
-      <span className={cx(loading && 'animate-fade-in')}>{loading ? (loadingText ?? 'Salvando…') : children}</span>
+      {/* inline-flex keeps a leading icon on the same line as the label */}
+      <span className={cx('inline-flex items-center gap-2', loading && 'animate-fade-in')}>{loading ? (loadingText ?? 'Salvando…') : children}</span>
     </button>
   )
 }
