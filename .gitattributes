@@ -144,3 +144,10 @@
 *.stl                filter=lfs diff=lfs merge=lfs -text
 *.nc                 filter=lfs diff=lfs merge=lfs -text
 *.mat                filter=lfs diff=lfs merge=lfs -text
+
+# ---------------------------------------------------------------------------
+# Arquivos servidos pelo site (public/) ficam no Git normal, fora do LFS:
+# a Vercel não baixa objetos LFS no build e publicaria só o ponteiro de texto.
+# (regra no fim: sobrescreve as de cima para estes caminhos)
+# ---------------------------------------------------------------------------
+public/** -filter -diff -merge
