@@ -11,6 +11,7 @@
  *
  * Contrato completo: docs/integracao-backend.md
  */
+import { isExpense } from '../lib/ledger'
 import { categoryMeta } from '../data/categories'
 import { TODAY } from '../data/mock'
 import { brlShort, monthKey, monthName, toISO } from '../lib/format'
@@ -20,7 +21,8 @@ import { ApiError, request, USE_AI_MOCK } from './http'
 
 export interface InvoiceItem {
   name: string
-  category: CategoryId
+  /** null = a IA não tem certeza (nome de CNPJ, "PAG*", etc.): a pessoa classifica */
+  category: CategoryId | null
   amount: number
   date: string
   subscription: boolean
@@ -79,7 +81,7 @@ export function buildContext(state: AppState): AssistantContext {
     byCategory: summary.byCategory,
     cards: state.cards.map(({ nickname, invoice, limit, dueDay }) => ({ nickname, invoice, limit, dueDay })),
     goals: state.goals.map((g) => ({ name: g.name, target: g.target, saved: g.saved, monthlyAverage: goalPace(g).average, featured: g.id === state.featuredGoalId })),
-    subscriptions: summary.transactions.filter((t) => t.category === 'assinaturas').map((t) => ({ name: t.name, amount: t.amount })),
+    subscriptions: summary.transactions.filter((t) => isExpense(t) && t.category === 'assinaturas').map((t) => ({ name: t.name, amount: t.amount })),
   }
 }
 
@@ -99,7 +101,8 @@ const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one :
 /* ------------------------------------------------------------ invoice */
 
 // prettier-ignore
-const SAMPLE: [string, CategoryId, number, boolean][] = [
+// Linhas com categoria null imitam o que aparece em faturas reais e a IA não consegue identificar
+const SAMPLE: [string, CategoryId | null, number, boolean][] = [
   ['Netflix', 'assinaturas', 55.9, true], ['Spotify', 'assinaturas', 21.9, true], ['iCloud', 'assinaturas', 14.9, true],
   ['Amazon Prime', 'assinaturas', 19.9, true], ['YouTube Premium', 'assinaturas', 24.9, true], ['Disney+', 'assinaturas', 43.9, true],
   ['iFood', 'alimentacao', 62.4, false], ['Padaria', 'alimentacao', 18.5, false], ['iFood', 'alimentacao', 48.9, false],
@@ -108,10 +111,10 @@ const SAMPLE: [string, CategoryId, number, boolean][] = [
   ['Posto Shell', 'transporte', 80, false], ['Uber', 'transporte', 31.4, false], ['Estacionamento', 'transporte', 22, false],
   ['Cinema', 'lazer', 64, false], ['Livraria', 'lazer', 42.9, false], ['Bar', 'lazer', 48.5, false],
   ['Show', 'lazer', 60, false], ['Farmácia', 'saude', 46.8, false], ['Academia', 'saude', 59.9, false],
-  ['Drogaria', 'saude', 28.4, false], ['Loja de roupas', 'outros', 0, false], ['Presente', 'outros', 35, false],
-  ['Papelaria', 'outros', 12.5, false], ['Lavanderia', 'outros', 26, false], ['Pet shop', 'outros', 38.9, false],
+  ['Drogaria', 'saude', 28.4, false], ['Loja de roupas', 'outros', 0, false], ['PAG*JOSEDASILVA', null, 35, false],
+  ['PIX QRS 4471-AB', null, 12.5, false], ['12.345.678/0001-90', null, 26, false], ['Pet shop', 'outros', 38.9, false],
   ['Barbearia', 'outros', 45, false], ['Delivery farmácia', 'saude', 15.9, false], ['Sorveteria', 'alimentacao', 16, false],
-  ['Chaveiro', 'outros', 20, false],
+  ['EC *MP*LOJA3421', null, 20, false],
 ]
 const INVOICE_TOTAL = 1284
 
@@ -166,7 +169,7 @@ const isDelivery = (name: string) => /restaurante|delivery|ifood|rappi|lanche/i.
 
 function deliveryOf(state: AppState, key: string) {
   return state.transactions
-    .filter((t) => monthKey(t.date) === key && isDelivery(t.name))
+    .filter((t) => isExpense(t) && monthKey(t.date) === key && isDelivery(t.name))
     .reduce((s, t) => s + t.amount, 0)
 }
 
@@ -221,7 +224,7 @@ function mockReply(question: string, state: AppState): AssistantReply {
   }
 
   if (/assinatura|netflix|spotify|streaming/.test(q)) {
-    const subs = state.transactions.filter((t) => t.category === 'assinaturas' && monthKey(t.date) === month)
+    const subs = state.transactions.filter((t) => isExpense(t) && t.category === 'assinaturas' && monthKey(t.date) === month)
     if (subs.length === 0) return text('Ainda não vejo assinaturas registradas. Envie sua fatura e eu encontro as cobranças recorrentes.')
     const top = [...subs].sort((a, b) => b.amount - a.amount).slice(0, 2)
     const saving = top.reduce((s, t) => s + t.amount, 0) * 4
@@ -272,7 +275,7 @@ export const replyText = (r: AssistantReply) => (r.kind === 'text' ? r.parts.map
 
 export function getInsight(state: AppState): Insight {
   const month = currentMonth()
-  const subs = state.transactions.filter((t) => t.category === 'assinaturas' && monthKey(t.date) === month)
+  const subs = state.transactions.filter((t) => isExpense(t) && t.category === 'assinaturas' && monthKey(t.date) === month)
   if (subs.length >= 2) {
     const top = [...subs].sort((a, b) => b.amount - a.amount).slice(0, 2)
     const saving = Math.round(top.reduce((s, t) => s + t.amount, 0) * 4)

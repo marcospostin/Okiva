@@ -4,9 +4,9 @@ Projeto Supabase `nbevtdkdzxuebmhvypan` (Postgres 17) ·
 [dashboard](https://supabase.com/dashboard/project/nbevtdkdzxuebmhvypan).
 Especificação de negócio: [modelo-de-dados.md](modelo-de-dados.md) · contrato das rotas: [integracao-backend.md](integracao-backend.md).
 
-> **Estado (2026-11-22):** banco criado, com RLS, regras e Storage aplicados e testados.
-> **O front ainda não está ligado ao Supabase**: `src/services/finance.ts` continua em mock / HTTP.
-> Ligar o front (supabase-js + Auth) é o próximo passo.
+> **Estado (2026-11-24):** banco e front ligados. Etapas 6–8 (contas, recorrências, parcelas, categorias editáveis,
+> gasto sem categoria, regras aprendidas) aplicadas e testadas: ver [financas-contas-categorias.md](financas-contas-categorias.md).
+> As tabelas e regras abaixo descrevem a base (etapas 1–5); as mudanças posteriores estão naquele documento.
 
 ## Arquivos
 
@@ -17,6 +17,12 @@ Especificação de negócio: [modelo-de-dados.md](modelo-de-dados.md) · contrat
 | `supabase/migrations/20261122172101_okiva_rls_grants.sql` | RLS, políticas, grants |
 | `supabase/migrations/20261122172120_okiva_storage.sql` | buckets `avatars` e `invoices` + políticas |
 | `supabase/migrations/20261122172624_okiva_cascade_guards.sql` | correção: exclusão da conta direto em `auth.users` |
+| `supabase/migrations/20261122174638_okiva_admin_role.sql` | papel de administrador (temporário) |
+| `supabase/migrations/20261122191358_okiva_demo_accounts.sql` | demonstração por visitante (contas anônimas) |
+| `supabase/migrations/20261122193349_okiva_signup_metadata.sql` | saldo inicial enviado no cadastro |
+| `supabase/migrations/20261123120000_okiva_contas_recorrencias_parcelas.sql` | receitas, contas, recorrências, parcelas, pagamento de fatura, aviso de teto |
+| `supabase/migrations/20261123180000_okiva_categorias_editaveis.sql` | categorias do app viram sugestões editáveis |
+| `supabase/migrations/20261124120000_okiva_sem_categoria_regras.sql` | gasto sem categoria e regras aprendidas |
 | `supabase/seed.sql` | **seed temporário** da conta demo (mocks) |
 | `supabase/cleanup_demo.sql` | remove a conta demo e tudo dela |
 | `prisma/schema.prisma` | espelho do schema em Prisma (só documentação) |

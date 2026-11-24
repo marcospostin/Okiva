@@ -2,6 +2,12 @@
   "version": "0.0.1",
   "configurations": [
     {
+      "name": "app",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["dev", "--port", "8443", "--strictPort"],
+      "port": 8443
+    },
+    {
       "name": "storybook",
       "runtimeExecutable": "pnpm",
       "runtimeArgs": ["storybook", "--no-open"],

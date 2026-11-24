@@ -107,8 +107,14 @@ export default function Cards() {
                   {privateMoney(brlShort(front.invoice), hidden)} de {privateMoney(brlShort(front.limit), hidden)}
                   {ordered.length > 1 && ' · toque na pilha para trocar'}
                 </p>
-                <div className="pt-3">
-                  <LinkButton onClick={() => openSheet({ type: 'card', id: front.id })}>Editar {front.nickname}</LinkButton>
+                <div className="flex flex-col gap-3 pt-4">
+                  <PrimaryButton onClick={() => openSheet({ type: 'payInvoice', cardId: front.id })} disabled={front.invoice <= 0}>
+                    {front.invoice > 0 ? `Pagar fatura ${front.nickname}` : 'Fatura paga'}
+                  </PrimaryButton>
+                  <p className="font-sat text-[12px] text-esk-subtle">Os gastos no cartão saem do saldo quando você paga a fatura.</p>
+                  <div>
+                    <LinkButton onClick={() => openSheet({ type: 'card', id: front.id })}>Editar {front.nickname}</LinkButton>
+                  </div>
                 </div>
               </div>
             </div>

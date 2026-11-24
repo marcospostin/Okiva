@@ -1,10 +1,21 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { CategoryId } from '../types'
 
-export type View = 'home' | 'cards' | 'goals' | 'invoice' | 'assistant'
+export type View = 'home' | 'cards' | 'goals' | 'invoice' | 'assistant' | 'accounts'
 
 export type SheetState =
-  | { type: 'add' }
+  /** Adicionar gasto ou receita */
+  | { type: 'add'; kind?: 'expense' | 'income' }
+  /** Pagar a fatura de um cartão (ou editar um pagamento: id) */
+  | { type: 'payInvoice'; cardId?: string; id?: string }
+  /** Nova conta (sem id) ou editar/excluir */
+  | { type: 'bankAccount'; id?: string }
+  /** Editar, encerrar ou apagar uma recorrência */
+  | { type: 'recurrence'; id: string }
+  /** Classificar gastos sem categoria (id = começar por este) */
+  | { type: 'categorize'; id?: string }
+  /** Aviso do teto de uma categoria */
+  | { type: 'capAlert'; category: CategoryId }
   | { type: 'edit'; id: string }
   | { type: 'tx'; id: string }
   | { type: 'card'; id?: string }

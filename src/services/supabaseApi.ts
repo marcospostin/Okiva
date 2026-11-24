@@ -8,9 +8,20 @@
  *   rodam em triggers no banco; o store do front aplica as mesmas regras localmente.
  */
 import type { PostgrestError } from '@supabase/supabase-js'
-import type { AppState, Card, CategoryId, CustomCategory, Goal, GoalDeposit, InvoiceImport, Stage, Transaction, User } from '../types'
+import type { Account, AppState, CapAlert, Card, CategoryId, CategoryRule, CustomCategory, Goal, GoalDeposit, InvoiceImport, Recurrence, Stage, Transaction, User } from '../types'
 import type { Database } from './database.types'
-import type { AccountSnapshot, CardInput, CategoryInput, GoalInput, ImportInvoiceInput, ImportInvoiceResult, TransactionInput } from './finance'
+import type {
+  AccountInput,
+  AccountSnapshot,
+  CardInput,
+  CategoryInput,
+  GoalInput,
+  ImportInvoiceInput,
+  ImportInvoiceResult,
+  InstallmentInput,
+  RecurrenceInput,
+  TransactionInput,
+} from './finance'
 import { ApiError } from './http'
 import { sb } from './supabase'
 
@@ -48,26 +59,67 @@ const num = (v: number | string | null | undefined) => (v === null || v === unde
 
 /* ------------------------------------------------------------ mapeadores */
 
+const toMethod = (type: Row<'transactions'>['method_type'], cardId: string | null): Transaction['method'] =>
+  type === 'card' && cardId ? { type: 'card', cardId } : type === 'pix' ? { type: 'pix' } : { type: 'cash' }
+
 export const toTx = (r: Row<'transactions'>): Transaction => ({
   id: r.id,
+  kind: r.kind,
   name: r.name,
   category: r.category,
-  method: r.method_type === 'card' && r.card_id ? { type: 'card', cardId: r.card_id } : r.method_type === 'pix' ? { type: 'pix' } : { type: 'cash' },
+  method: toMethod(r.method_type, r.card_id),
+  accountId: r.account_id ?? undefined,
   date: r.date,
   amount: num(r.amount),
   source: r.source,
   invoiceId: r.invoice_id ?? undefined,
+  installment: r.installment_group ? { group: r.installment_group, number: r.installment_number ?? 1, total: r.installment_total ?? 1 } : undefined,
+  recurrenceId: r.recurrence_id ?? undefined,
+  posted: r.posted,
 })
 
+// Parcelas e recorrência não vão no insert/update comum: parcelas passam por save_installments
+// e a ligação com a recorrência é criada pelo banco (process_due).
 const fromTx = (t: TransactionInput) => ({
+  kind: t.kind ?? 'expense',
   name: t.name,
   category: t.category,
   method_type: t.method.type,
   card_id: t.method.type === 'card' ? t.method.cardId : null,
+  account_id: t.method.type === 'card' && (t.kind ?? 'expense') === 'expense' ? null : (t.accountId ?? null),
   date: t.date,
   amount: t.amount,
   source: t.source,
   invoice_id: t.invoiceId ?? null,
+})
+
+const toAccount = (r: Row<'accounts'>): Account => ({ id: r.id, name: r.name, kind: r.kind, startingBalance: num(r.starting_balance) })
+
+const toRecurrence = (r: Row<'recurrences'>): Recurrence => ({
+  id: r.id,
+  kind: r.kind === 'income' ? 'income' : 'expense',
+  name: r.name,
+  category: r.category,
+  method: toMethod(r.method_type, r.card_id),
+  accountId: r.account_id ?? undefined,
+  amount: num(r.amount),
+  day: r.day,
+  startDate: r.start_date,
+  endDate: r.end_date ?? undefined,
+  lastRun: r.last_run ?? undefined,
+})
+
+const fromRecurrence = (r: RecurrenceInput) => ({
+  kind: r.kind,
+  name: r.name,
+  category: r.category,
+  method_type: r.kind === 'income' ? ('pix' as const) : r.method.type,
+  card_id: r.kind === 'expense' && r.method.type === 'card' ? r.method.cardId : null,
+  account_id: r.kind === 'expense' && r.method.type === 'card' ? null : (r.accountId ?? null),
+  amount: r.amount,
+  day: r.day,
+  start_date: r.startDate,
+  end_date: r.endDate ?? null,
 })
 
 export const toCard = (r: Row<'cards'>): Card => ({
@@ -103,7 +155,7 @@ export const toInvoice = (r: Row<'invoice_imports'>): InvoiceImport => ({
   previousInvoice: r.previous_invoice === null ? null : num(r.previous_invoice),
 })
 
-const toCategory = (r: Row<'categories'>): CustomCategory => ({ id: r.id, label: r.label, color: r.color })
+const toCategory = (r: Row<'categories'>): CustomCategory => ({ id: r.key ?? r.id, rowId: r.id, label: r.label, color: r.color })
 
 /* ------------------------------------------------------------- avatar */
 
@@ -143,15 +195,21 @@ export async function loadAccount(): Promise<AppState> {
   // Sempre filtra pela própria conta: um admin enxerga todas as linhas via RLS,
   // mas o app mostra só os dados de quem está logado.
   const me = await uid()
-  const [profile, cards, txs, goals, deposits, caps, categories, invoices] = await Promise.all([
+  // Conta padrão, parcelas que venceram e recorrências do dia (idempotente). Se falhar, o app abre mesmo assim.
+  const due = await db.rpc('process_due')
+  if (due.error) console.warn('process_due', due.error.message)
+  const [profile, cards, txs, goals, deposits, caps, categories, invoices, accounts, recurrences, rules] = await Promise.all([
     run(db.from('profiles').select('*').eq('id', me).single()),
     run(db.from('cards').select('*').eq('user_id', me).order('position', { ascending: true })),
     run(db.from('transactions').select('*').eq('user_id', me).order('date', { ascending: false }).order('created_at', { ascending: false })),
     run(db.from('goals').select('*').eq('user_id', me).order('created_at', { ascending: true })),
     run(db.from('goal_deposits').select('*').eq('user_id', me).order('date', { ascending: false })),
     run(db.from('budget_caps').select('*').eq('user_id', me)),
-    run(db.from('categories').select('*').eq('user_id', me).order('created_at', { ascending: true })),
+    run(db.from('categories').select('*').eq('user_id', me).order('position', { ascending: true }).order('created_at', { ascending: true })),
     run(db.from('invoice_imports').select('*').eq('user_id', me).order('imported_at', { ascending: false }).order('created_at', { ascending: false })),
+    run(db.from('accounts').select('*').eq('user_id', me).order('position', { ascending: true }).order('created_at', { ascending: true })),
+    run(db.from('recurrences').select('*').eq('user_id', me).order('created_at', { ascending: true })),
+    run(db.from('category_rules').select('*').eq('user_id', me)),
   ])
   // Papel vem do app_metadata do Auth (só o servidor altera)
   const { data: session } = await db.auth.getSession()
@@ -165,11 +223,18 @@ export async function loadAccount(): Promise<AppState> {
     hideBalance: profile.hide_balance,
     startingBalance: num(profile.starting_balance),
     transactions: txs.map(toTx),
+    accounts: accounts.map(toAccount),
+    recurrences: recurrences.map(toRecurrence),
+    categoryRules: rules.map((r): CategoryRule => ({ id: r.id, pattern: r.pattern, category: r.category })),
     cards: cards.map(toCard),
     cardOrder: cards.map((c) => c.id),
     goals: goals.map(toGoal),
     featuredGoalId: profile.featured_goal_id ?? '',
-    budget: { total: num(profile.budget_total), caps: Object.fromEntries(caps.map((c) => [c.category, num(c.value)])) },
+    budget: {
+      total: num(profile.budget_total),
+      caps: Object.fromEntries(caps.map((c) => [c.category, num(c.value)])),
+      alerts: Object.fromEntries(caps.map((c) => [c.category, { enabled: c.alert_enabled, percent: c.alert_percent }])),
+    },
     customCategories: categories.map(toCategory),
     deposits: deposits.map(toDeposit),
     invoices: invoices.map(toInvoice),
@@ -369,17 +434,93 @@ export const sbBudgetApi = {
     const id = await uid()
     await run(sb().from('budget_caps').delete().eq('user_id', id).eq('category', category))
   },
+  setCapAlert: async (category: CategoryId, alert: CapAlert) => {
+    const id = await uid()
+    const r = await run(
+      sb().from('budget_caps').update({ alert_enabled: alert.enabled, alert_percent: alert.percent }).eq('user_id', id).eq('category', category).select().single(),
+    )
+    return { category: r.category, alert: { enabled: r.alert_enabled, percent: r.alert_percent } }
+  },
+}
+
+/* ------------------------------------------------- regras aprendidas */
+
+export const sbRulesApi = {
+  save: async (pattern: string, category: CategoryId, existingId?: string): Promise<CategoryRule> => {
+    const q = existingId
+      ? sb().from('category_rules').update({ pattern, category }).eq('id', existingId)
+      : sb().from('category_rules').insert({ pattern, category })
+    const r = await run(q.select().single())
+    return { id: r.id, pattern: r.pattern, category: r.category }
+  },
+  remove: async (id: string) => {
+    await run(sb().from('category_rules').delete().eq('id', id))
+  },
+}
+
+/* --------------------------------------------------------------- contas */
+
+export const sbAccountsApi = {
+  create: async (input: AccountInput) =>
+    toAccount(await run(sb().from('accounts').insert({ name: input.name, kind: input.kind, starting_balance: input.startingBalance }).select().single())),
+  update: async (a: Account) =>
+    toAccount(await run(sb().from('accounts').update({ name: a.name, kind: a.kind, starting_balance: a.startingBalance }).eq('id', a.id).select().single())),
+  remove: async (id: string) => {
+    await run(sb().from('accounts').delete().eq('id', id))
+  },
+}
+
+/* ---------------------------------------------------------- recorrências */
+
+/** Depois de mexer em recorrências/parcelas o banco gera e ajusta lançamentos: recarrega tudo. */
+const reload = () => sbAccountApi.snapshot()
+
+export const sbRecurrencesApi = {
+  create: async (input: RecurrenceInput, _current?: AppState) => {
+    await run(sb().from('recurrences').insert(fromRecurrence(input)).select().single())
+    return reload()
+  },
+  update: async (r: Recurrence, _current?: AppState) => {
+    await run(sb().from('recurrences').update(fromRecurrence(r)).eq('id', r.id).select().single())
+    return reload()
+  },
+  remove: async (id: string) => {
+    await run(sb().from('recurrences').delete().eq('id', id))
+  },
+}
+
+/* -------------------------------------------------------------- parcelas */
+
+export const sbInstallmentsApi = {
+  save: async (input: InstallmentInput, _current?: AppState) => {
+    await run(
+      sb().rpc('save_installments', {
+        p_group: (input.group ?? null) as string,
+        p_name: input.name,
+        p_category: (input.category ?? '') as string,
+        p_card_id: input.cardId,
+        p_total: input.total,
+        p_count: input.count,
+        p_first_date: input.firstDate,
+      }),
+    )
+    return reload()
+  },
+  remove: async (group: string) => {
+    await run(sb().from('transactions').delete().eq('user_id', await uid()).eq('installment_group', group))
+  },
 }
 
 /* ------------------------------------------------------------ categorias */
 
 export const sbCategoriesApi = {
   create: async (input: CategoryInput) => toCategory(await run(sb().from('categories').insert({ label: input.label, color: input.color }).select().single())),
-  update: async (c: CustomCategory) => toCategory(await run(sb().from('categories').update({ label: c.label, color: c.color }).eq('id', c.id).select().single())),
-  remove: async (id: string) => {
-    await run(sb().from('categories').delete().eq('id', id))
+  update: async (c: CustomCategory) =>
+    toCategory(await run(sb().from('categories').update({ label: c.label, color: c.color }).eq('id', c.rowId ?? c.id).select().single())),
+  remove: async (id: CategoryId, moveTo?: CategoryId | null) => {
+    await run(sb().rpc('delete_category', moveTo ? { p_category: id, p_move_to: moveTo } : { p_category: id }))
   },
-  recategorize: async (ids: string[], category: CategoryId) => {
+  recategorize: async (ids: string[], category: CategoryId | null) => {
     await run(sb().rpc('recategorize_transactions', { p_ids: ids, p_category: category }))
   },
 }

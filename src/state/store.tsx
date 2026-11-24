@@ -1,10 +1,12 @@
 import { createContext, useContext, useEffect, useMemo, useReducer, useRef, type ReactNode } from 'react'
 import { USE_SUPABASE } from '../services/http'
+import { normalizeLabel, SUGGESTED_CATEGORIES } from '../data/categories'
 import { savePrefs } from '../services/supabaseApi'
 import { DEMO_USER, initialState, TODAY } from '../data/mock'
 import { restoreSession, sessionEmail, signOut } from '../services/auth'
 import { monthKey, toISO } from '../lib/format'
-import type { AppState, Budget, Card, CategoryId, CustomCategory, Goal, GoalDeposit, InvoiceImport, Stage, Transaction, User } from '../types'
+import { adjustInvoice, balanceEffect, ensureAccounts, isExpense, kindOf, processDueLocal, round2 } from '../lib/ledger'
+import type { Account, AppState, Budget, CapAlert, Card, CategoryId, CategoryRule, CustomCategory, Goal, GoalDeposit, InvoiceImport, Recurrence, Stage, Transaction, User } from '../types'
 
 /** Each account keeps its own data: okiva:data:<email> */
 const dataKey = (email: string) => `okiva:data:${email}`
@@ -31,8 +33,11 @@ type Action =
   | { type: 'setName'; name: string }
   | { type: 'updateDeposit'; deposit: GoalDeposit }
   | { type: 'deleteDeposit'; id: string }
-  /** Removes a custom category: its expenses go to "Outros" and its cap is removed */
-  | { type: 'deleteCategory'; id: string }
+  /** Removes a category: its expenses go to `moveTo` (null/ausente = sem categoria), recurrences to `moveTo` or "outros" */
+  | { type: 'deleteCategory'; id: string; moveTo?: CategoryId | null }
+  /** Regra aprendida "sempre usar X para este nome" (cria ou troca a categoria) */
+  | { type: 'saveRule'; rule: CategoryRule }
+  | { type: 'deleteRule'; id: string }
   | { type: 'saveCard'; card: Card }
   | { type: 'deleteCard'; id: string }
   | { type: 'cycleCards' }
@@ -46,13 +51,20 @@ type Action =
   /** Moves expenses into another category (a suggestion built from their names) */
   | { type: 'recategorize'; ids: string[]; category: CategoryId }
   | { type: 'reset' }
+  /** Dados recarregados do servidor (ou recalculados no mock) depois de parcelas/recorrências */
+  | { type: 'sync'; snapshot: Partial<AppState> }
+  | { type: 'saveAccount'; account: Account }
+  /** Lançamentos, recorrências e saldo inicial da conta passam para a primeira conta que sobrar */
+  | { type: 'deleteAccount'; id: string }
+  | { type: 'saveRecurrence'; recurrence: Recurrence }
+  /** Os lançamentos já gerados continuam; só deixam de estar ligados à regra */
+  | { type: 'deleteRecurrence'; id: string }
+  /** Apaga todas as parcelas de uma compra */
+  | { type: 'deleteGroup'; group: string }
+  | { type: 'setCapAlert'; category: CategoryId; alert: CapAlert }
 
-/** Keeps a card's typed invoice in sync with expenses paid on it. */
-function adjustInvoice(cards: Card[], tx: Pick<Transaction, 'method' | 'amount'>, sign: 1 | -1) {
-  if (tx.method.type !== 'card') return cards
-  const id = tx.method.cardId
-  return cards.map((c) => (c.id === id ? { ...c, invoice: Math.max(0, c.invoice + sign * tx.amount) } : c))
-}
+/** Keeps a card's invoice in sync: posted card expenses add, invoice payments subtract. */
+const invoiceOf = (cards: Card[], tx: Transaction, sign: 1 | -1) => adjustInvoice(cards, tx, sign, todayISO())
 
 /** A deposit changes both the saved amount and the deposit total that drives the monthly average. */
 function addToGoal(goals: Goal[], goalId: string, delta: number) {
@@ -69,13 +81,19 @@ function reducer(state: AppState, action: Action): AppState {
       return action.state
     case 'logout':
       return LOGGED_OUT
-    case 'setBalance':
-      // Saldo = startingBalance - expenses, so the start absorbs the typed balance
-      return { ...state, startingBalance: action.value + state.transactions.reduce((s, t) => s + t.amount, 0) }
+    case 'setBalance': {
+      // A diferença entra no saldo inicial da primeira conta (mesma regra de set_balance no banco)
+      const withAccount = ensureAccounts(state)
+      const diff = action.value - balanceOf(withAccount)
+      const [first, ...rest] = withAccount.accounts
+      return { ...withAccount, accounts: [{ ...first, startingBalance: round2(first.startingBalance + diff) }, ...rest] }
+    }
     case 'removeCap': {
       const caps = { ...state.budget.caps }
       delete caps[action.category]
-      return { ...state, budget: { ...state.budget, caps } }
+      const alerts = { ...state.budget.alerts }
+      delete alerts[action.category]
+      return { ...state, budget: { ...state.budget, caps, alerts } }
     }
     case 'deleteGoal': {
       const goals = state.goals.filter((g) => g.id !== action.id)
@@ -94,12 +112,12 @@ function reducer(state: AppState, action: Action): AppState {
       return { ...state, hideBalance: !state.hideBalance }
     case 'addTx': {
       const tx = action.tx
-      return { ...state, transactions: [tx, ...state.transactions], cards: adjustInvoice(state.cards, tx, 1) }
+      return { ...state, transactions: [tx, ...state.transactions], cards: invoiceOf(state.cards, tx, 1) }
     }
     case 'updateTx': {
       const prev = state.transactions.find((t) => t.id === action.tx.id)
       if (!prev) return state
-      const cards = adjustInvoice(adjustInvoice(state.cards, prev, -1), action.tx, 1)
+      const cards = invoiceOf(invoiceOf(state.cards, prev, -1), action.tx, 1)
       return { ...state, cards, transactions: state.transactions.map((t) => (t.id === prev.id ? action.tx : t)) }
     }
     case 'deleteTx': {
@@ -108,9 +126,58 @@ function reducer(state: AppState, action: Action): AppState {
       return {
         ...state,
         transactions: state.transactions.filter((t) => t.id !== action.id),
-        cards: adjustInvoice(state.cards, prev, -1),
+        cards: invoiceOf(state.cards, prev, -1),
       }
     }
+    case 'deleteGroup': {
+      const gone = state.transactions.filter((t) => t.installment?.group === action.group)
+      return {
+        ...state,
+        transactions: state.transactions.filter((t) => t.installment?.group !== action.group),
+        cards: gone.reduce((cards, t) => invoiceOf(cards, t, -1), state.cards),
+      }
+    }
+    case 'sync':
+      return { ...state, ...action.snapshot }
+    case 'saveAccount': {
+      const a = action.account
+      const exists = state.accounts.some((x) => x.id === a.id)
+      return { ...state, accounts: exists ? state.accounts.map((x) => (x.id === a.id ? a : x)) : [...state.accounts, a] }
+    }
+    case 'deleteAccount': {
+      const gone = state.accounts.find((a) => a.id === action.id)
+      if (!gone) return state
+      const rest = state.accounts.filter((a) => a.id !== action.id)
+      const target = rest[0]
+      if (!target) return { ...state, accounts: rest }
+      const move = <T extends { accountId?: string }>(x: T): T => (x.accountId === gone.id ? { ...x, accountId: target.id } : x)
+      return {
+        ...state,
+        accounts: rest.map((a) => (a.id === target.id ? { ...a, startingBalance: round2(a.startingBalance + gone.startingBalance) } : a)),
+        transactions: state.transactions.map(move),
+        recurrences: state.recurrences.map(move),
+      }
+    }
+    case 'saveRecurrence': {
+      const r = action.recurrence
+      const exists = state.recurrences.some((x) => x.id === r.id)
+      return { ...state, recurrences: exists ? state.recurrences.map((x) => (x.id === r.id ? r : x)) : [...state.recurrences, r] }
+    }
+    case 'deleteRecurrence':
+      return {
+        ...state,
+        recurrences: state.recurrences.filter((r) => r.id !== action.id),
+        transactions: state.transactions.map((t) => (t.recurrenceId === action.id ? { ...t, recurrenceId: undefined } : t)),
+      }
+    case 'saveRule': {
+      const r = action.rule
+      const rest = state.categoryRules.filter((x) => x.id !== r.id && x.pattern !== r.pattern)
+      return { ...state, categoryRules: [...rest, r] }
+    }
+    case 'deleteRule':
+      return { ...state, categoryRules: state.categoryRules.filter((r) => r.id !== action.id) }
+    case 'setCapAlert':
+      return { ...state, budget: { ...state.budget, alerts: { ...state.budget.alerts, [action.category]: action.alert } } }
     case 'importInvoice': {
       const card = action.card
       return {
@@ -146,8 +213,11 @@ function reducer(state: AppState, action: Action): AppState {
         cards: state.cards.filter((c) => c.id !== action.id),
         cardOrder: state.cardOrder.filter((id) => id !== action.id),
         transactions: state.transactions.map((t) =>
-          t.method.type === 'card' && t.method.cardId === action.id ? { ...t, method: { type: 'cash' } } : t,
+          t.method.type === 'card' && t.method.cardId === action.id
+            ? { ...t, kind: kindOf(t) === 'invoice_payment' ? 'expense' : t.kind, method: { type: 'cash' } }
+            : t,
         ),
+        recurrences: state.recurrences.map((r) => (r.method.type === 'card' && r.method.cardId === action.id ? { ...r, method: { type: 'cash' } } : r)),
         // Imported invoices stay in the history, no longer tied to a card
         invoices: state.invoices.map((i) => (i.cardId === action.id ? { ...i, cardId: null, previousInvoice: null } : i)),
       }
@@ -200,7 +270,9 @@ function reducer(state: AppState, action: Action): AppState {
       return {
         ...state,
         customCategories: state.customCategories.filter((c) => c.id !== action.id),
-        transactions: state.transactions.map((t) => (t.category === action.id ? { ...t, category: 'outros' } : t)),
+        transactions: state.transactions.map((t) => (t.category === action.id && isExpense(t) ? { ...t, category: action.moveTo ?? null } : t)),
+        recurrences: state.recurrences.map((r) => (r.category === action.id && r.kind === 'expense' ? { ...r, category: action.moveTo ?? 'outros' } : r)),
+        categoryRules: state.categoryRules.filter((r) => r.category !== action.id),
         budget: { ...state.budget, caps },
       }
     }
@@ -234,14 +306,18 @@ export function emptyState(user: User, balance: number): AppState {
   return {
     ...initialState,
     user,
-    startingBalance: balance,
+    startingBalance: 0,
     transactions: [],
+    accounts: [{ id: `a_${Date.now().toString(36)}`, name: 'Principal', kind: 'checking', startingBalance: balance }],
+    recurrences: [],
     cards: [],
     cardOrder: [],
     goals: [],
     featuredGoalId: '',
     budget: { total: 0, caps: {} },
-    customCategories: [],
+    customCategories: SUGGESTED_CATEGORIES,
+    categoriesSeeded: true,
+    categoryRules: [],
     deposits: [],
     invoices: [],
   }
@@ -251,7 +327,15 @@ function parseState(raw: string): AppState {
   const saved = { ...initialState, ...JSON.parse(raw) } as AppState
   // Saves made before custom categories existed
   saved.customCategories = saved.customCategories ?? []
+  // Saves made when the app's categories were fixed: they become the person's (editable) categories
+  if (!saved.categoriesSeeded) {
+    const missing = SUGGESTED_CATEGORIES.filter((s) => !saved.customCategories.some((c) => c.id === s.id || normalizeLabel(c.label) === normalizeLabel(s.label)))
+    saved.customCategories = [...missing, ...saved.customCategories]
+    saved.categoriesSeeded = true
+  }
   saved.invoices = saved.invoices ?? []
+  saved.recurrences = saved.recurrences ?? []
+  saved.categoryRules = saved.categoryRules ?? []
   // Saves made before the deposit history: example goals get their example deposits
   saved.deposits = saved.deposits ?? initialState.deposits.filter((d) => saved.goals.some((g) => g.id === d.goalId && g.deposited === initialState.goals.find((x) => x.id === g.id)?.deposited))
   // Saves made before deposit tracking: example goals get the new realistic data,
@@ -261,14 +345,15 @@ function parseState(raw: string): AppState {
     const example = initialState.goals.find((x) => x.id === g.id)
     return example ?? { ...g, startedAt: g.startedAt ?? currentMonth(), initialSaved: g.saved, deposited: 0 }
   })
-  return saved
+  // Saves made before accounts: the "Principal" account keeps the shown balance; due items are generated
+  return processDueLocal(ensureAccounts(saved), todayISO())
 }
 
 /** Data for a signed-in account: saved data, demo examples, or an empty start. */
 export function accountState(user: User, opts: { balance?: number } = {}): AppState {
   const raw = localStorage.getItem(dataKey(user.email))
   if (raw) return { ...parseState(raw), user }
-  if (user.email === DEMO_USER.email) return { ...initialState, user }
+  if (user.email === DEMO_USER.email) return processDueLocal({ ...initialState, user }, todayISO())
   return emptyState(user, opts.balance ?? 0)
 }
 
@@ -297,7 +382,7 @@ function load(): AppState {
     const email = sessionEmail()
     const raw = email ? localStorage.getItem(dataKey(email)) : null
     if (raw) return parseState(raw)
-    if (email === DEMO_USER.email) return { ...initialState, user: DEMO_USER }
+    if (email === DEMO_USER.email) return processDueLocal({ ...initialState, user: DEMO_USER }, todayISO())
     if (email) signOut()
   } catch {
     /* ignore corrupted storage */
@@ -361,38 +446,131 @@ export function previousMonth(key: string) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
 }
 
+/** Saldo de hoje: soma das contas (gasto no cartão só sai ao pagar a fatura). */
 export function balanceOf(state: AppState) {
-  return state.startingBalance - state.transactions.reduce((s, t) => s + t.amount, 0)
+  const today = todayISO()
+  const starts = (state.accounts ?? []).reduce((s, a) => s + a.startingBalance, 0)
+  return round2((state.startingBalance ?? 0) + starts + state.transactions.reduce((s, t) => s + balanceEffect(t, today), 0))
+}
+
+/** Saldo de uma conta. Lançamentos sem conta (dados antigos) contam na primeira. */
+export function accountBalance(state: AppState, accountId: string) {
+  const today = todayISO()
+  const account = state.accounts.find((a) => a.id === accountId)
+  if (!account) return 0
+  return round2(account.startingBalance + accountTransactions(state, accountId).reduce((s, t) => s + balanceEffect(t, today), 0))
+}
+
+/** Lançamentos que movimentaram a conta (mais recentes primeiro). Gasto no cartão não passa pela conta. */
+export function accountTransactions(state: AppState, accountId: string) {
+  const first = state.accounts[0]?.id
+  return state.transactions
+    .filter((t) => (kindOf(t) !== 'expense' || t.method.type !== 'card') && (t.accountId ?? first) === accountId)
+    .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0))
+}
+
+export function accountName(state: AppState, id?: string) {
+  return state.accounts.find((a) => a.id === id)?.name ?? state.accounts[0]?.name ?? 'Conta'
 }
 
 export interface MonthSummary {
   key: string
+  /** Só gastos (o que conta no teto) */
   total: number
   previousTotal: number
+  /** Só gastos com categoria */
   byCategory: { category: CategoryId; amount: number }[]
+  /** Gastos do mês ainda sem categoria (contam no total, em nenhum teto) */
+  uncategorized: number
+  /** Tudo que aconteceu no mês: gastos, receitas e pagamentos de fatura */
   transactions: Transaction[]
+  income: number
+  /** Mês que ainda não chegou: tudo nele é previsto (parcelas) */
+  future: boolean
 }
 
 export function monthSummary(state: AppState, key: string): MonthSummary {
   const txs = state.transactions
     .filter((t) => monthKey(t.date) === key)
     .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0))
+  const expenses = txs.filter(isExpense)
   const prevKey = previousMonth(key)
   const previousTotal = state.transactions
-    .filter((t) => monthKey(t.date) === prevKey)
+    .filter((t) => isExpense(t) && monthKey(t.date) === prevKey)
     .reduce((s, t) => s + t.amount, 0)
   const map = new Map<CategoryId, number>()
-  for (const t of txs) map.set(t.category, (map.get(t.category) ?? 0) + t.amount)
+  for (const t of expenses) if (t.category !== null) map.set(t.category, (map.get(t.category) ?? 0) + t.amount)
   const byCategory = [...map.entries()]
-    .map(([category, amount]) => ({ category, amount }))
+    .map(([category, amount]) => ({ category, amount: round2(amount) }))
     .sort((a, b) => b.amount - a.amount)
-  return { key, total: txs.reduce((s, t) => s + t.amount, 0), previousTotal, byCategory, transactions: txs }
+  return {
+    key,
+    total: round2(expenses.reduce((s, t) => s + t.amount, 0)),
+    previousTotal: round2(previousTotal),
+    byCategory,
+    uncategorized: round2(expenses.filter((t) => t.category === null).reduce((s, t) => s + t.amount, 0)),
+    transactions: txs,
+    income: round2(txs.filter((t) => kindOf(t) === 'income').reduce((s, t) => s + t.amount, 0)),
+    future: key > currentMonth(),
+  }
 }
 
+/** Meses com lançamento + o atual. Meses futuros aparecem só se já têm parcelas. Mais recente primeiro. */
 export function availableMonths(state: AppState) {
   const set = new Set(state.transactions.map((t) => monthKey(t.date)))
   set.add(currentMonth())
   return [...set].sort().reverse()
+}
+
+/** Gastos sem categoria (pendentes), mais recentes primeiro. Parcelas da mesma compra contam uma vez. */
+export function uncategorized(state: AppState) {
+  const seen = new Set<string>()
+  return state.transactions
+    .filter((t) => isExpense(t) && t.category === null)
+    .filter((t) => {
+      const g = t.installment?.group
+      if (!g) return true
+      if (seen.has(g)) return false
+      seen.add(g)
+      return true
+    })
+    .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0))
+}
+
+/** Categoria aprendida para um nome ("PAG*JOSE" -> Alimentação), se a pessoa ainda tem a categoria. */
+export function ruleFor(state: AppState, name: string): CategoryId | undefined {
+  const key = normalizeLabel(name)
+  if (!key) return undefined
+  const rule = state.categoryRules.find((r) => r.pattern === key)
+  return rule && state.customCategories.some((c) => c.id === rule.category) ? rule.category : undefined
+}
+
+/** Aviso do teto de uma categoria (padrão: ligado em 80%). */
+export function capAlert(state: AppState, category: CategoryId): CapAlert {
+  return state.budget.alerts?.[category] ?? { enabled: true, percent: 80 }
+}
+
+/** Gasto da categoria no mês (só gastos). */
+export function spentIn(state: AppState, category: CategoryId, key: string, exceptIds: string[] = []) {
+  return round2(
+    state.transactions
+      .filter((t) => isExpense(t) && t.category === category && monthKey(t.date) === key && !exceptIds.includes(t.id))
+      .reduce((s, t) => s + t.amount, 0),
+  )
+}
+
+/**
+ * Aviso de teto ao lançar `amount` na categoria no mês `key` (mês da compra / da 1ª parcela).
+ * Devolve a porcentagem do teto depois do lançamento quando chega no limite de aviso escolhido.
+ */
+export function capWarning(state: AppState, category: CategoryId, key: string, amount: number, exceptIds: string[] = []) {
+  const cap = state.budget.caps[category]
+  if (!cap || amount <= 0) return null
+  const alert = capAlert(state, category)
+  if (!alert.enabled) return null
+  const after = spentIn(state, category, key, exceptIds) + amount
+  const percent = Math.round((after / cap) * 100)
+  return percent >= alert.percent ? { percent, cap, after } : null
 }
 
 export function daysLeftInMonth() {
@@ -417,7 +595,8 @@ export function goalPace(goal: Goal) {
   return { average, monthsLeft }
 }
 
-export function methodLabel(state: AppState, t: Pick<Transaction, 'method'>) {
+export function methodLabel(state: AppState, t: Pick<Transaction, 'method' | 'kind' | 'accountId'>) {
+  if (kindOf(t) === 'income') return accountName(state, t.accountId)
   if (t.method.type === 'pix') return 'Pix'
   if (t.method.type === 'cash') return 'Dinheiro'
   const id = t.method.cardId

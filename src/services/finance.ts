@@ -7,10 +7,25 @@
  *
  * Contrato completo (rotas, payloads, erros): docs/integracao-backend.md
  */
-import { uid } from '../lib/format'
-import type { AppState, Budget, Card, CategoryId, CustomCategory, Goal, GoalDeposit, InvoiceImport, Transaction, User } from '../types'
+import { toISO, uid } from '../lib/format'
+import { adjustInvoice, buildInstallments, processDueLocal, type InstallmentInput } from '../lib/ledger'
+import { TODAY } from '../data/mock'
+import type { Account, AppState, Budget, CapAlert, Card, CategoryId, CategoryRule, CustomCategory, Goal, GoalDeposit, InvoiceImport, Recurrence, Transaction, User } from '../types'
 import { mockDelay, request, USE_MOCK, USE_SUPABASE } from './http'
-import { sbAccountApi, sbBudgetApi, sbCardsApi, sbCategoriesApi, sbGoalsApi, sbInvoicesApi, sbTransactionsApi } from './supabaseApi'
+import {
+  sbAccountApi,
+  sbAccountsApi,
+  sbBudgetApi,
+  sbCardsApi,
+  sbCategoriesApi,
+  sbGoalsApi,
+  sbInstallmentsApi,
+  sbInvoicesApi,
+  sbRecurrencesApi,
+  sbRulesApi,
+  sbTransactionsApi,
+} from './supabaseApi'
+import { normalizeLabel } from '../data/categories'
 
 /* ------------------------------------------------------------------ DTOs */
 
@@ -35,6 +50,13 @@ export interface ImportInvoiceResult {
 
 /** Dados que o backend devolve no login / ao abrir o app. */
 export type AccountSnapshot = Omit<AppState, 'user' | 'stage' | 'hideBalance'>
+
+export type AccountInput = Omit<Account, 'id'>
+export type RecurrenceInput = Omit<Recurrence, 'id' | 'lastRun'>
+export type { InstallmentInput }
+
+const snapshotOf = ({ user: _u, stage: _s, hideBalance: _h, ...rest }: AppState): AccountSnapshot => rest
+const today = () => toISO(TODAY)
 
 /* ------------------------------------------------------------- mock helpers */
 
@@ -184,6 +206,66 @@ const budgetRest = {
   /** DELETE /api/budget/caps/:category */
   removeCap: (category: CategoryId): Promise<void> =>
     USE_MOCK ? mock(undefined) : request('DELETE', `/api/budget/caps/${category}`),
+
+  /** PUT /api/budget/caps/:category/alert — { enabled, percent } */
+  setCapAlert: (category: CategoryId, alert: CapAlert): Promise<{ category: CategoryId; alert: CapAlert }> =>
+    USE_MOCK ? mock({ category, alert }) : request('PUT', `/api/budget/caps/${category}/alert`, alert),
+}
+
+/* --------------------------------------------------------------- contas */
+
+const accountsRest = {
+  /** POST /api/accounts */
+  create: (input: AccountInput): Promise<Account> => (USE_MOCK ? mock({ ...input, id: `a_${uid()}` }) : request('POST', '/api/accounts', input)),
+  /** PUT /api/accounts/:id */
+  update: (account: Account): Promise<Account> => (USE_MOCK ? mock(account) : request('PUT', `/api/accounts/${account.id}`, account)),
+  /** DELETE /api/accounts/:id — lançamentos, recorrências e saldo inicial passam para a conta mais antiga que sobrar. */
+  remove: (id: string): Promise<void> => (USE_MOCK ? mock(undefined) : request('DELETE', `/api/accounts/${id}`)),
+}
+
+/* ---------------------------------------------------------- recorrências */
+
+const recurrencesRest = {
+  /** POST /api/recurrences — cria a regra e já gera o que venceu. Devolve os dados atualizados. */
+  create: (input: RecurrenceInput, current: AppState): Promise<AccountSnapshot> =>
+    USE_MOCK
+      ? mock(snapshotOf(processDueLocal({ ...current, recurrences: [...current.recurrences, { ...input, id: `r_${uid()}` }] }, today())))
+      : request('POST', '/api/recurrences', input),
+  /** PUT /api/recurrences/:id — vale daqui para frente; lançamentos já gerados não mudam. */
+  update: (rec: Recurrence, current: AppState): Promise<AccountSnapshot> =>
+    USE_MOCK
+      ? mock(snapshotOf(processDueLocal({ ...current, recurrences: current.recurrences.map((r) => (r.id === rec.id ? rec : r)) }, today())))
+      : request('PUT', `/api/recurrences/${rec.id}`, rec),
+  /** DELETE /api/recurrences/:id — os lançamentos já gerados continuam. */
+  remove: (id: string): Promise<void> => (USE_MOCK ? mock(undefined) : request('DELETE', `/api/recurrences/${id}`)),
+}
+
+/* -------------------------------------------------------------- parcelas */
+
+const installmentsRest = {
+  /** PUT /api/installments — cria ou substitui (input.group) uma compra parcelada. Devolve os dados atualizados. */
+  save: (input: InstallmentInput, current: AppState): Promise<AccountSnapshot> => {
+    if (!USE_MOCK) return request('PUT', '/api/installments', input)
+    const t = today()
+    const old = input.group ? current.transactions.filter((x) => x.installment?.group === input.group) : []
+    const fresh = buildInstallments(input, t)
+    let cards = old.reduce((c, x) => adjustInvoice(c, x, -1, t), current.cards)
+    cards = fresh.reduce((c, x) => adjustInvoice(c, x, 1, t), cards)
+    const transactions = [...fresh, ...current.transactions.filter((x) => !old.includes(x))].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0))
+    return mock(snapshotOf({ ...current, cards, transactions }))
+  },
+  /** DELETE /api/installments/:group — apaga todas as parcelas da compra. */
+  remove: (group: string): Promise<void> => (USE_MOCK ? mock(undefined) : request('DELETE', `/api/installments/${group}`)),
+}
+
+/* ------------------------------------------------- regras aprendidas */
+
+const rulesRest = {
+  /** PUT /api/category-rules — { pattern, category }. O servidor normaliza o nome; um nome tem uma regra só. */
+  save: (pattern: string, category: CategoryId, existingId?: string): Promise<CategoryRule> =>
+    USE_MOCK ? mock({ id: existingId ?? `rule_${uid()}`, pattern: normalizeLabel(pattern), category }) : request('PUT', '/api/category-rules', { pattern, category }),
+  /** DELETE /api/category-rules/:id */
+  remove: (id: string): Promise<void> => (USE_MOCK ? mock(undefined) : request('DELETE', `/api/category-rules/${id}`)),
 }
 
 /* ------------------------------------------------------------ categorias */
@@ -199,11 +281,12 @@ const categoriesRest = {
   update: (category: CustomCategory): Promise<CustomCategory> =>
     USE_MOCK ? mock(category) : request('PUT', `/api/categories/${category.id}`, category),
 
-  /** DELETE /api/categories/:id — os lançamentos dela passam para "outros" e o teto dela é removido. */
-  remove: (id: string): Promise<void> => (USE_MOCK ? mock(undefined) : request('DELETE', `/api/categories/${id}`)),
+  /** DELETE /api/categories/:id?moveTo= — os gastos dela passam para `moveTo` (sem moveTo = ficam sem categoria) e o teto dela é removido. */
+  remove: (id: CategoryId, moveTo?: CategoryId | null): Promise<void> =>
+    USE_MOCK ? mock(undefined) : request('DELETE', `/api/categories/${id}${moveTo ? `?moveTo=${encodeURIComponent(moveTo)}` : ''}`),
 
-  /** POST /api/transactions/recategorize — move lançamentos para outra categoria (sugestão aceita). */
-  recategorize: (ids: string[], category: CategoryId): Promise<void> =>
+  /** POST /api/transactions/recategorize — move gastos para outra categoria (null = sem categoria). */
+  recategorize: (ids: string[], category: CategoryId | null): Promise<void> =>
     USE_MOCK ? mock(undefined, 0) : request('POST', '/api/transactions/recategorize', { ids, category }),
 }
 
@@ -218,3 +301,7 @@ export const cardsApi: typeof cardsRest = USE_SUPABASE ? sbCardsApi : cardsRest
 export const goalsApi: typeof goalsRest = USE_SUPABASE ? sbGoalsApi : goalsRest
 export const budgetApi: typeof budgetRest = USE_SUPABASE ? sbBudgetApi : budgetRest
 export const categoriesApi: typeof categoriesRest = USE_SUPABASE ? sbCategoriesApi : categoriesRest
+export const accountsApi: typeof accountsRest = USE_SUPABASE ? sbAccountsApi : accountsRest
+export const recurrencesApi: typeof recurrencesRest = USE_SUPABASE ? sbRecurrencesApi : recurrencesRest
+export const installmentsApi: typeof installmentsRest = USE_SUPABASE ? sbInstallmentsApi : installmentsRest
+export const rulesApi: typeof rulesRest = USE_SUPABASE ? sbRulesApi : rulesRest

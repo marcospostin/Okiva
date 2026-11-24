@@ -56,6 +56,9 @@
   --color-esk-offwhite: #f1f1ee;
   --color-esk-ink: #0a0a0a;
   --color-esk-ink-2: #333333;
+  /* Valores de lançamentos: saída (negativo) e entrada (positivo) */
+  --color-esk-negative: #ff7b7b;
+  --color-esk-positive: #6ee39a;
 
   --font-sans: 'Satoshi', 'Inter:Regular', ui-sans-serif, system-ui, sans-serif;
   --font-sat: 'Satoshi', 'Inter:Regular', ui-sans-serif, system-ui, sans-serif;

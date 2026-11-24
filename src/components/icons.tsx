@@ -1,6 +1,7 @@
 import {
   BookOpen,
   Car,
+  CircleHelp,
   HeartPulse,
   Plane,
   ReceiptText,
@@ -66,7 +67,8 @@ const TILE_LUCIDE: Partial<Record<CategoryId, LucideIcon>> = {
 
 const isRestaurant = (name?: string) => !!name && /restaurante|delivery|ifood|lanche|pizza|burger/i.test(name)
 
-export function CategoryRowIcon({ category, name, size = 21 }: { category: CategoryId; name?: string; size?: number }) {
+export function CategoryRowIcon({ category, name, size = 21 }: { category: CategoryId | null; name?: string; size?: number }) {
+  if (category === null) return <CircleHelp size={Math.round(size * 0.9)} strokeWidth={1.6} className="text-esk-lilac" aria-hidden />
   if (category === 'alimentacao' && isRestaurant(name)) return <Asset name="07e92.svg" size={size} />
   const a = ROW_ASSETS[category]
   if (a) return <Asset name={a} size={size} />

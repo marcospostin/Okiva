@@ -1,11 +1,11 @@
-import { ArrowUpRight, Plus } from 'lucide-react'
+import { ArrowUpRight, Bell, BellOff, ChevronRight, Plus } from 'lucide-react'
 import { useMemo } from 'react'
 import { categoryMeta } from '../data/categories'
 import { Asset, GoalIcon } from '../components/icons'
 import { ActionRow, CountUp, cx, EmptyState, FeatureCard, Kicker, PrimaryButton, ListPanel, ListRow, Page, ProgressBar, RoundButton, Ring, ScreenHeader, SectionHeader } from '../components/ui'
 import { brl, brlShort, deadlineLabel, pct, privateMoney } from '../lib/format'
 import { getInsight } from '../services/ai'
-import { currentMonth, daysLeftInMonth, goalPace, monthSummary, useStore } from '../state/store'
+import { capAlert, currentMonth, daysLeftInMonth, goalPace, monthSummary, useStore } from '../state/store'
 import { useUI } from '../state/ui'
 import type { CategoryId, Goal } from '../types'
 
@@ -81,16 +81,18 @@ export default function Goals() {
                 const spent = spentBy(cat)
                 const p = pct(spent, cap)
                 const meta = categoryMeta(state, cat)
+                const alert = capAlert(state, cat)
+                const near = alert.enabled && p >= alert.percent
                 return (
+                  <div key={cat} className="relative">
                   <button
-                    key={cat}
                     type="button"
                     onClick={() => openSheet({ type: 'budget', category: cat })}
-                    className="flex flex-col gap-3 rounded-[26px] bg-esk-elevated p-4 text-left transition hover:bg-[#1f1f23] active:scale-[0.98] md:p-5"
+                    className="flex w-full flex-col gap-3 rounded-[26px] bg-esk-elevated p-4 text-left transition hover:bg-[#1f1f23] active:scale-[0.98] md:p-5"
                   >
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="truncate font-sat text-[14px] font-medium text-white">{meta.label}</span>
+                    <div className="flex items-center gap-2 pr-9">
                       <span className="size-[10px] shrink-0 rounded-full" style={{ backgroundColor: meta.color }} />
+                      <span className="truncate font-sat text-[14px] font-medium text-white">{meta.label}</span>
                     </div>
                     <p className="font-sat text-[28px] leading-none font-medium tracking-[-1px] text-white">{p}%</p>
                     <div className="h-[4px] w-full overflow-hidden rounded-[2px] bg-esk-track">
@@ -103,6 +105,20 @@ export default function Goals() {
                       {privateMoney(brlShort(spent), hidden)} de {privateMoney(brlShort(cap), hidden)}
                     </span>
                   </button>
+                  {/* Aviso por categoria: liga/desliga e porcentagem */}
+                  <button
+                    type="button"
+                    onClick={() => openSheet({ type: 'capAlert', category: cat })}
+                    aria-label={alert.enabled ? `Aviso de ${meta.label} em ${alert.percent}%` : `Aviso de ${meta.label} desligado`}
+                    title={alert.enabled ? `Aviso em ${alert.percent}%` : 'Aviso desligado'}
+                    className={cx(
+                      'absolute top-3 right-3 grid size-[32px] place-items-center rounded-full transition hover:bg-white/[0.08] md:top-4 md:right-4',
+                      near ? 'bg-esk-lilac/15 text-esk-lilac' : alert.enabled ? 'text-esk-text-2' : 'text-esk-subtle',
+                    )}
+                  >
+                    {alert.enabled ? <Bell size={15} strokeWidth={1.8} /> : <BellOff size={15} strokeWidth={1.8} />}
+                  </button>
+                  </div>
                 )
               })}
               <button
@@ -116,6 +132,17 @@ export default function Goals() {
                 <span className="font-sat text-[14px] font-medium text-white">Teto por categoria</span>
               </button>
             </div>
+            <button
+              type="button"
+              onClick={() => openSheet({ type: 'categories' })}
+              className="flex items-center justify-between gap-3 rounded-[22px] bg-esk-elevated px-5 py-4 text-left transition hover:bg-[#1f1f23]"
+            >
+              <span className="flex flex-col">
+                <span className="font-sat text-[15px] font-medium text-white">Categorias</span>
+                <span className="font-sat text-[12px] text-esk-subtle">Criar, renomear, trocar a cor ou excluir · {state.customCategories.length}</span>
+              </span>
+              <ChevronRight size={16} className="shrink-0 text-esk-subtle" aria-hidden />
+            </button>
             </div>
           </section>
 
@@ -125,7 +152,7 @@ export default function Goals() {
               <div className="flex flex-col gap-[18px]">
                 <SectionHeader title="Meta principal" />
                 <div>
-                <button type="button" onClick={() => openSheet({ type: 'goal', id: featured.id })} className="text-left transition active:scale-[0.99]">
+                <button type="button" onClick={() => openSheet({ type: 'save', goalId: featured.id })} className="w-full text-left transition active:scale-[0.99]">
                   <FeatureCard>
                     <div className="flex items-center justify-between font-sat text-[15px] font-medium">
                       <span>{featured.name}</span>
@@ -146,7 +173,7 @@ export default function Goals() {
                 <div className="pt-3">
                   <ActionRow
                     icon={<Asset name="b24c9.svg" size={24} />}
-                    label="Guardar R$ 500"
+                    label="Guardar dinheiro"
                     onClick={() => openSheet({ type: 'save', goalId: featured.id })}
                   />
                 </div>
@@ -183,6 +210,22 @@ export default function Goals() {
                   ))}
                 </ListPanel>
               </div>
+            )}
+
+            {featured && (
+              <button
+                type="button"
+                onClick={() => openSheet({ type: 'goal' })}
+                className="mt-4 flex items-center gap-3 rounded-[24px] border border-dashed border-esk-track px-5 py-4 text-left transition hover:border-esk-subtle active:scale-[0.99]"
+              >
+                <span className="grid size-[36px] shrink-0 place-items-center rounded-full bg-esk-elevated text-esk-lime">
+                  <Plus size={18} strokeWidth={1.8} />
+                </span>
+                <span className="flex flex-col">
+                  <span className="font-sat text-[15px] font-medium text-white">Nova meta</span>
+                  <span className="font-sat text-[12px] text-esk-subtle">Viagem, reserva, curso…</span>
+                </span>
+              </button>
             )}
           </section>
 

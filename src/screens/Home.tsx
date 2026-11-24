@@ -1,10 +1,12 @@
-import { ChevronDown, ChevronLeft, ChevronRight, Sparkles } from 'lucide-react'
+import { ArrowDownLeft, Check, ChevronDown, ChevronLeft, ChevronRight, CircleHelp, CreditCard, Repeat, Sparkles } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { categoryMeta } from '../data/categories'
+import { categoryMeta, UNCATEGORIZED } from '../data/categories'
 import { Asset, CategoryRowIcon, CategoryTileIcon } from '../components/icons'
 import { Avatar, CountUp, cx, Page } from '../components/ui'
-import { brl, brlShort, capitalize, privateExpense, privateMoney, monthName, pct, relativeDay } from '../lib/format'
+import { brl, brlShort, capitalize, privateExpense, privateIncome, privateMoney, monthName, pct, relativeDay } from '../lib/format'
+import { incomeLabel, kindOf } from '../lib/ledger'
 import { TODAY } from '../data/mock'
+import { toISO } from '../lib/format'
 import {
   availableMonths,
   balanceOf,
@@ -12,11 +14,105 @@ import {
   methodLabel,
   monthSummary,
   previousMonth,
+  accountName,
+  uncategorized,
   useStore,
 } from '../state/store'
+import type { Transaction } from '../types'
 import { useUI } from '../state/ui'
+import { LockBadge, PlusHint, PLUS_PITCH } from '../components/PlusHint'
 
-const monthLabel = (key: string) => capitalize(monthName(Number(key.slice(5, 7)) - 1))
+const monthLabel = (key: string) => {
+  const name = capitalize(monthName(Number(key.slice(5, 7)) - 1))
+  return key.slice(0, 4) === currentMonth().slice(0, 4) ? name : `${name} ${key.slice(0, 4)}`
+}
+
+/**
+ * Seletor de mês. Fechado mostra só o nome; aberto marca "(atual)" e deixa os meses
+ * que ainda não chegaram (só parcelas) num tom mais leve.
+ */
+/** Rola só a lista (não a página) até o mês escolhido */
+const centerInList = (el: HTMLLIElement | null) => {
+  const list = el?.parentElement
+  if (el && list) list.scrollTop = el.offsetTop - list.clientHeight / 2 + el.clientHeight / 2
+}
+
+function MonthPicker({ months, value, onChange }: { months: string[]; value: string; onChange: (m: string) => void }) {
+  const [open, setOpen] = useState(false)
+  const box = useRef<HTMLDivElement>(null)
+  const current = currentMonth()
+  useEffect(() => {
+    if (!open) return
+    const onDown = (e: PointerEvent) => {
+      if (box.current && !box.current.contains(e.target as Node)) setOpen(false)
+    }
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setOpen(false)
+    document.addEventListener('pointerdown', onDown)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('pointerdown', onDown)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [open])
+  const future = value > current
+  return (
+    <div ref={box} className="relative">
+      <button
+        type="button"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-label={`Escolher mês: ${monthLabel(value)}`}
+        onClick={() => setOpen((v) => !v)}
+        className="flex items-center gap-2 rounded-[16px] bg-esk-elevated py-[6px] pr-3 pl-3 font-inter-m text-[12px] leading-[1.3] font-medium transition hover:bg-[#1f1f23]"
+      >
+        <span className={future ? 'text-esk-muted' : 'text-white'}>{monthLabel(value)}</span>
+        <ChevronDown size={12} className={cx('text-esk-muted transition', open && 'rotate-180')} aria-hidden />
+      </button>
+      {open && (
+        <ul
+          role="listbox"
+          aria-label="Meses"
+          className="absolute top-[calc(100%+6px)] right-0 z-30 max-h-[300px] min-w-[220px] animate-rise overflow-y-auto rounded-[18px] bg-esk-elevated p-1 shadow-[0_12px_32px_rgba(0,0,0,0.5)] ring-1 ring-esk-track"
+        >
+          {months.map((m) => {
+            const isFuture = m > current
+            const selected = m === value
+            return (
+              <li key={m} role="option" aria-selected={selected} ref={selected ? centerInList : undefined}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onChange(m)
+                    setOpen(false)
+                  }}
+                  className={cx(
+                    'flex w-full items-center justify-between gap-3 rounded-[14px] px-3 py-[9px] text-left font-inter-m text-[13px] font-medium transition hover:bg-white/[0.05]',
+                    isFuture ? 'text-esk-muted' : 'text-white',
+                    selected && 'bg-white/[0.06]',
+                  )}
+                >
+                  <span className="whitespace-nowrap">
+                    {monthLabel(m)}
+                    {m === current && <span className="text-esk-lime"> (atual)</span>}
+                    {isFuture && <span className="ml-2 rounded-[6px] bg-white/[0.06] px-[5px] py-px text-[10px] text-esk-muted">previsto</span>}
+                  </span>
+                  {selected && <Check size={14} className="text-esk-lime" aria-hidden />}
+                </button>
+              </li>
+            )
+          })}
+        </ul>
+      )}
+    </div>
+  )
+}
+
+function TxRowIcon({ t }: { t: Transaction }) {
+  const k = kindOf(t)
+  if (k === 'income') return <ArrowDownLeft size={20} strokeWidth={1.7} className="text-esk-lime" aria-hidden />
+  if (k === 'invoice_payment') return <CreditCard size={19} strokeWidth={1.6} className="text-esk-text-2" aria-hidden />
+  return <CategoryRowIcon category={t.category} name={t.name} />
+}
 
 /** Até 3 cards cabem lado a lado em qualquer largura; acima disso vira carrossel. */
 const STATIC_TILES = 3
@@ -118,13 +214,19 @@ export default function Home() {
   const [showAll, setShowAll] = useState(false)
   const summary = useMemo(() => monthSummary(state, month), [state, month])
   const months = useMemo(() => availableMonths(state), [state])
+  // Mês que sumiu (ex.: compra parcelada apagada): volta para o atual
+  useEffect(() => {
+    if (!months.includes(month)) setMonth(currentMonth())
+  }, [months, month])
   const balance = balanceOf(state)
   const plus = state.stage === 2
   const hidden = state.hideBalance
   const isCurrent = month === currentMonth()
+  const isFuture = summary.future
   const available = state.budget.total - summary.total
   const variation = summary.previousTotal ? pct(summary.total - summary.previousTotal, summary.previousTotal) : null
   const txs = showAll ? summary.transactions : summary.transactions.slice(0, 6)
+  const todayKey = toISO(TODAY)
 
   // Cards do mês: todas as categorias com teto em Metas (mesmo sem gasto, ex.: Lazer)
   // + categorias com gasto e sem teto, para cada trecho da barra ter o seu card.
@@ -155,14 +257,30 @@ export default function Home() {
       .filter((c) => !rest.has(c.category))
       .map((c) => ({ key: c.category, amount: c.amount, color: categoryMeta(state, c.category).color }))
     if (restAmount > 0) segs.push({ key: '__rest', amount: restAmount, color: REST_COLOR })
+    // Gasto sem categoria: entra no total do mês, num trecho cinza listrado no fim da barra
+    if (summary.uncategorized > 0) segs.push({ key: '__none', amount: summary.uncategorized, color: UNCATEGORIZED.color })
     return segs
-  }, [summary.byCategory, restTiles, restAmount, state])
+  }, [summary.byCategory, summary.uncategorized, restTiles, restAmount, state])
+  const pendingCount = useMemo(() => uncategorized(state).length, [state])
 
+  // Fatura fica sempre visível; sem o Plus aparece bloqueada e o toque explica o recurso
+  const [plusHint, setPlusHint] = useState(false)
+  const shortcutsRef = useRef<HTMLElement>(null)
+  useEffect(() => {
+    if (plus) setPlusHint(false)
+  }, [plus])
   const shortcuts = [
-    { key: 'add', label: 'Adicionar', icon: <Asset name="0a681.svg" size={23} />, onClick: () => openSheet({ type: 'add' }), primary: true },
-    ...(plus ? [{ key: 'invoice', label: 'Fatura', icon: <Asset name="c2640.svg" size={23} />, onClick: () => navigate('invoice') }] : []),
-    { key: 'cards', label: 'Cartões', icon: <Asset name="3b177.svg" size={23} />, onClick: () => navigate('cards') },
-    { key: 'goals', label: 'Metas', icon: <Asset name="3e49f.svg" size={23} />, onClick: () => navigate('goals') },
+    { key: 'add', label: 'Adicionar', icon: <Asset name="0a681.svg" size={23} />, onClick: () => openSheet({ type: 'add' }), primary: true, locked: false },
+    {
+      key: 'invoice',
+      label: 'Fatura',
+      icon: <Asset name="c2640.svg" size={23} />,
+      onClick: () => (plus ? navigate('invoice') : setPlusHint((v) => !v)),
+      primary: false,
+      locked: !plus,
+    },
+    { key: 'cards', label: 'Cartões', icon: <Asset name="3b177.svg" size={23} />, onClick: () => navigate('cards'), primary: false, locked: false },
+    { key: 'goals', label: 'Metas', icon: <Asset name="3e49f.svg" size={23} />, onClick: () => navigate('goals'), primary: false, locked: false },
   ]
 
   return (
@@ -183,7 +301,7 @@ export default function Home() {
             <p className="font-inter-m text-[18px] font-medium text-white">Olá, {state.user?.name.split(' ')[0] ?? 'Lucas'}</p>
           </div>
           <div className="flex shrink-0 items-center gap-2">
-            {plus && <span className="hidden rounded-full bg-esk-lilac px-2 py-1 font-mono text-[9px] font-medium tracking-[0.8px] text-esk-ink sm:inline">PLUS</span>}
+            {plus && <span className="rounded-full bg-esk-lilac px-2 py-1 font-mono text-[9px] leading-none font-medium tracking-[0.8px] text-esk-ink">PLUS</span>}
             <p className="font-sat text-[22px] leading-none font-bold tracking-[-0.6px] text-esk-lime md:text-[26px]">Okiva</p>
           </div>
         </header>
@@ -217,10 +335,17 @@ export default function Home() {
                 <CountUp value={balance} format={(n) => privateMoney(brl(n), hidden)} />
               </p>
               <div className="mt-auto flex items-center justify-between gap-3">
-                <div className="flex items-center gap-[6px]">
+                <button
+                  type="button"
+                  onClick={() => navigate('accounts')}
+                  className="group -m-1 flex items-center gap-[6px] rounded-full p-1 transition hover:bg-black/5"
+                >
                   <Asset name="009b2.svg" size={15} />
-                  <p className="font-inter text-[12px] text-esk-ink">Seu dinheiro, no seu ritmo.</p>
-                </div>
+                  <span className="font-inter-m text-[12px] font-medium text-esk-ink">
+                    {state.accounts.length > 1 ? `${state.accounts.length} contas` : 'Ver contas'}
+                  </span>
+                  <ChevronRight size={13} strokeWidth={2.2} className="text-esk-ink transition group-hover:translate-x-0.5" aria-hidden />
+                </button>
                 {/* Always visible: in manual mode it explains Okiva Plus and unlocks the assistant */}
                 <button
                   type="button"
@@ -234,32 +359,48 @@ export default function Home() {
               </div>
             </section>
 
-            <nav aria-label="Atalhos" className={cx('grid', plus ? 'grid-cols-4 gap-2 sm:gap-3' : 'grid-cols-3 gap-3')}>
+            <div className="flex flex-col gap-3">
+            <nav ref={shortcutsRef} aria-label="Atalhos" className="grid grid-cols-4 gap-2 sm:gap-3">
               {shortcuts.map((s, i) => (
                 <button
                   key={s.key}
                   type="button"
                   onClick={s.onClick}
+                  aria-label={s.locked ? `${s.label} (exclusivo do Plus)` : undefined}
+                  aria-disabled={s.locked || undefined}
+                  aria-expanded={s.locked ? plusHint : undefined}
                   style={{ animationDelay: `${i * 50}ms` }}
                   className={cx(
-                    'flex h-[84px] min-w-0 animate-rise flex-col items-start gap-2 rounded-[24px] pt-[14px] pb-3 text-left transition duration-200 hover:-translate-y-0.5 active:scale-[0.96] lg:h-[96px]',
-                    plus ? 'pr-2 pl-3 sm:pr-3 sm:pl-4' : 'pr-3 pl-4',
-                    s.primary ? 'bg-esk-lime hover:brightness-95' : 'bg-esk-tile hover:bg-[#242427]',
+                    'relative flex h-[84px] min-w-0 animate-rise flex-col items-start gap-2 rounded-[24px] pt-[14px] pr-2 pb-3 pl-3 text-left transition duration-200 active:scale-[0.96] sm:pr-3 sm:pl-4 lg:h-[96px]',
+                    s.primary ? 'bg-esk-lime hover:-translate-y-0.5 hover:brightness-95' : 'bg-esk-tile hover:bg-[#242427]',
+                    !s.locked && !s.primary && 'hover:-translate-y-0.5',
                   )}
                 >
-                  {s.icon}
+                  <span className={cx(s.locked && 'opacity-40 saturate-50')}>{s.icon}</span>
                   <span
                     className={cx(
-                      'max-w-full truncate font-inter-m leading-[1.35] font-medium lg:text-[13px]',
-                      plus ? 'text-[11px] tracking-[-0.2px] sm:text-[12px] sm:tracking-normal' : 'text-[12px]',
-                      s.primary ? 'text-esk-ink' : 'text-white',
+                      'max-w-full truncate font-inter-m text-[11px] leading-[1.35] font-medium tracking-[-0.2px] sm:text-[12px] sm:tracking-normal lg:text-[13px]',
+                      s.primary ? 'text-esk-ink' : s.locked ? 'text-white/40' : 'text-white',
                     )}
                   >
                     {s.label}
                   </span>
+                  {s.locked && <LockBadge className="top-[10px] right-[10px] ring-esk-tile" />}
                 </button>
               ))}
             </nav>
+            {plusHint && !plus && (
+              <PlusHint
+                label="Fatura"
+                pitch={PLUS_PITCH.invoice}
+                view="invoice"
+                arrow="top"
+                arrowLeft="37.5%"
+                within={shortcutsRef}
+                onClose={() => setPlusHint(false)}
+              />
+            )}
+            </div>
 
           </div>
 
@@ -269,35 +410,24 @@ export default function Home() {
             <section aria-label="Gastos do mês" className="flex min-w-0 flex-col gap-4">
               <div className="flex items-center justify-between">
                 <p className="font-inter-m text-[11px] leading-[1.3] font-medium tracking-[1.1px] text-esk-muted">
-                  {isCurrent ? 'ESTE MÊS' : 'MÊS'}
+                  {isCurrent ? 'ESTE MÊS' : isFuture ? 'PREVISTO · PARCELAS' : 'MÊS'}
                 </p>
-                <label className="relative flex items-center gap-3 rounded-[16px] bg-esk-elevated py-[6px] pr-3 pl-3">
-                  <span className="sr-only">Escolher mês</span>
-                  <select
-                    value={month}
-                    onChange={(e) => {
-                      setMonth(e.target.value)
-                      setShowAll(false)
-                    }}
-                    className="cursor-pointer appearance-none bg-transparent pr-5 font-inter-m text-[12px] leading-[1.3] font-medium text-white outline-none"
-                  >
-                    {months.map((m) => (
-                      <option key={m} value={m} className="bg-esk-elevated">
-                        {monthLabel(m)}
-                      </option>
-                    ))}
-                  </select>
-                  <span className="pointer-events-none absolute right-3">
-                    <Asset name="3338f.svg" size={12} />
-                  </span>
-                </label>
+                <MonthPicker
+                  months={months}
+                  value={month}
+                  onChange={(m) => {
+                    setMonth(m)
+                    setShowAll(false)
+                  }}
+                />
               </div>
 
               <div className="flex items-center justify-between gap-3 leading-[1.3] whitespace-nowrap">
-                <p className="font-inter-m text-[36px] font-medium tracking-[-1.44px] text-white lg:text-[44px] lg:tracking-[-1.9px]">
+                <p className={cx('font-inter-m text-[36px] font-medium tracking-[-1.44px] lg:text-[44px] lg:tracking-[-1.9px]', isFuture ? 'text-esk-muted' : 'text-white')}>
                   <CountUp value={summary.total} format={(n) => privateMoney(brl(n), hidden)} />
                 </p>
-                {variation !== null && (
+                {isFuture && <p className="font-inter text-[11px] whitespace-normal text-right text-esk-muted">Já comprometido</p>}
+                {variation !== null && !isFuture && (
                   <div className="flex flex-col items-end gap-px">
                     <p className={cx('font-inter-m text-[12px] font-medium', variation <= 0 ? 'text-esk-lime' : 'text-white')}>
                       {variation <= 0 ? `↘ ${Math.abs(variation)}% menos` : `↗ ${variation}% mais`}
@@ -317,8 +447,8 @@ export default function Home() {
                 </button>
               ) : (
               <div className="flex items-start justify-between leading-[1.3] whitespace-nowrap">
-                <p className={cx('font-inter-m text-[12px] font-medium', available >= 0 ? 'text-esk-lime' : 'text-white')}>
-                  {available >= 0 ? `${privateMoney(brlShort(available), hidden)} ainda disponíveis` : `${privateMoney(brlShort(-available), hidden)} acima do teto`}
+                <p className={cx('font-inter-m text-[12px] font-medium', available >= 0 ? 'text-esk-lime' : 'text-white', isFuture && 'opacity-70')}>
+                  {available >= 0 ? `${privateMoney(brlShort(available), hidden)} ainda ${isFuture ? 'livres' : 'disponíveis'}` : `${privateMoney(brlShort(-available), hidden)} acima do teto`}
                 </p>
                 <p className="font-inter text-[11px] text-esk-muted">Teto de {privateMoney(brlShort(state.budget.total), hidden)}</p>
               </div>
@@ -331,8 +461,14 @@ export default function Home() {
                   barSegments.map((s) => (
                     <div
                       key={s.key}
-                      className="h-full origin-left animate-[grow-x_600ms_cubic-bezier(0.2,0.8,0.2,1)_both] rounded-[3px] transition-[flex-grow] duration-500"
-                      style={{ flexGrow: s.amount, backgroundColor: s.color }}
+                      className={cx('h-full origin-left animate-[grow-x_600ms_cubic-bezier(0.2,0.8,0.2,1)_both] rounded-[3px] transition-[flex-grow] duration-500', isFuture && 'opacity-50')}
+                      style={{
+                        flexGrow: s.amount,
+                        backgroundColor: s.color,
+                        // Mês que ainda não chegou: listras, como algo previsto
+                        backgroundImage:
+                          isFuture || s.key === '__none' ? 'repeating-linear-gradient(135deg, rgba(0,0,0,0.35) 0 3px, transparent 3px 7px)' : undefined,
+                      }}
                     />
                   ))
                 )}
@@ -340,26 +476,44 @@ export default function Home() {
 
               {tiles.length > 0 && (
                 <CategoryTiles count={shownTiles.length + (overflow ? 1 : 0)}>
-                  {shownTiles.map((c, i) => (
+                  {shownTiles.map((c, i) => {
+                    const meta = categoryMeta(state, c.category)
+                    // Card cheio na cor da categoria; com teto, a % usada vira uma barra no rodapé (como em Metas)
+                    const used = c.cap !== undefined ? Math.min(100, (c.amount / c.cap) * 100) : null
+                    return (
                     <button
                       key={c.category}
                       type="button"
                       onClick={() => navigate('goals')}
-                      className="flex h-[142px] min-w-0 animate-rise flex-col items-start gap-2 rounded-[26px] pt-4 pr-[10px] pb-[14px] pl-[13px] text-left text-esk-ink transition duration-200 hover:-translate-y-0.5 hover:brightness-[0.97] active:scale-[0.97] lg:h-[156px] lg:pl-4"
-                      style={{ backgroundColor: categoryMeta(state, c.category).color, animationDelay: `${80 + Math.min(i, 5) * 60}ms` }}
+                      className={cx(
+                        'flex h-[142px] min-w-0 animate-rise flex-col items-start gap-2 rounded-[26px] pt-4 pr-[10px] pb-[14px] pl-[13px] text-left text-esk-ink transition duration-200 hover:-translate-y-0.5 hover:brightness-[0.97] active:scale-[0.97] lg:h-[156px] lg:pl-4',
+                        isFuture && 'opacity-60',
+                      )}
+                      style={{ backgroundColor: meta.color, animationDelay: `${80 + Math.min(i, 5) * 60}ms` }}
                     >
                       <CategoryTileIcon category={c.category} />
                       <span className="flex min-w-0 flex-col gap-[3px] leading-[1.3]">
-                        <span className="truncate font-inter-m text-[10px] font-medium lg:text-[11px]">{categoryMeta(state, c.category).label}</span>
+                        <span className="truncate font-inter-m text-[10px] font-medium lg:text-[11px]">{meta.label}</span>
                         <span className="font-inter-sb text-[18px] font-semibold tracking-[-0.54px] whitespace-nowrap lg:text-[20px]">
                           {privateMoney(brlShort(c.amount), hidden)}
                         </span>
                       </span>
-                      <span className="mt-auto font-inter text-[9px] leading-[1.3] text-esk-ink-2 lg:text-[10px]">
-                        {c.cap !== undefined ? `${pct(c.amount, c.cap)}% do teto` : 'Sem teto'}
+                      <span className="mt-auto flex w-full flex-col gap-[6px]">
+                        <span className="font-inter text-[9px] leading-[1.3] text-esk-ink-2 lg:text-[10px]">
+                          {c.cap !== undefined ? `${pct(c.amount, c.cap)}% do teto` : 'Sem teto'}
+                        </span>
+                        {used !== null && (
+                          <span aria-hidden className="block h-[5px] w-full overflow-hidden rounded-[3px] bg-esk-ink/15">
+                            <span
+                              className="block h-full origin-left animate-[grow-x_800ms_cubic-bezier(0.2,0.8,0.2,1)_both] rounded-[3px] bg-esk-ink transition-[width] duration-700"
+                              style={{ width: `${used}%`, animationDelay: `${200 + Math.min(i, 5) * 60}ms` }}
+                            />
+                          </span>
+                        )}
                       </span>
                     </button>
-                  ))}
+                    )
+                  })}
                   {/* Último card: soma das categorias que não cabem na Home (mesmo trecho cinza na barra) */}
                   {overflow && (
                     <button
@@ -397,25 +551,50 @@ export default function Home() {
             <section aria-label="Transações" className="flex flex-col gap-[14px]">
               <div className="flex items-center justify-between leading-[1.4] whitespace-nowrap text-esk-muted">
                 <p className="font-inter-m text-[11px] font-medium tracking-[1.1px]">TRANSAÇÕES</p>
-                <p className="font-inter text-[10px]">Registradas por você</p>
+                <p className="font-inter text-[10px]">{summary.income > 0 ? `${privateIncome(summary.income, hidden)} de receitas` : 'Registradas por você'}</p>
               </div>
+
+              {/* Gastos sem categoria: ficam sinalizados até a pessoa classificar */}
+              {pendingCount > 0 && (
+                <button
+                  type="button"
+                  onClick={() => openSheet({ type: 'categorize' })}
+                  className="flex animate-rise items-center gap-3 rounded-[20px] bg-esk-lilac/10 px-4 py-3 text-left ring-1 ring-esk-lilac/30 transition hover:bg-esk-lilac/15 active:scale-[0.99]"
+                >
+                  <span className="grid size-[34px] shrink-0 place-items-center rounded-full bg-esk-lilac text-esk-ink">
+                    <CircleHelp size={18} strokeWidth={1.9} aria-hidden />
+                  </span>
+                  <span className="flex min-w-0 flex-1 flex-col">
+                    <span className="font-inter-m text-[13px] font-medium text-white">
+                      {pendingCount === 1 ? '1 gasto sem categoria' : `${pendingCount} gastos sem categoria`}
+                    </span>
+                    <span className="font-inter text-[11px] text-esk-muted">Classifique para os tetos ficarem certos</span>
+                  </span>
+                  <span className="flex shrink-0 items-center gap-1 font-inter-m text-[12px] font-medium text-esk-lilac">
+                    Classificar <ChevronRight size={14} aria-hidden />
+                  </span>
+                </button>
+              )}
 
               {summary.transactions.length === 0 ? (
                 <div className="flex flex-col items-start gap-3 rounded-[26px] border border-dashed border-esk-track p-6">
-                  <p className="font-inter-m text-[15px] font-medium text-white">Nenhum gasto em {monthName(Number(month.slice(5, 7)) - 1)}</p>
-                  <p className="font-inter text-[12px] text-esk-muted">Fez uma compra? Digite o valor e o mês se mexe.</p>
+                  <p className="font-inter-m text-[15px] font-medium text-white">Nada em {monthName(Number(month.slice(5, 7)) - 1)}</p>
+                  <p className="font-inter text-[12px] text-esk-muted">Fez uma compra ou recebeu algo? Digite o valor e o mês se mexe.</p>
                   <button
                     type="button"
                     onClick={() => openSheet({ type: 'add' })}
                     className="mt-1 rounded-[16px] bg-esk-lime px-4 py-2 font-inter-m text-[12px] font-medium text-esk-ink"
                   >
-                    Adicionar gasto
+                    Adicionar
                   </button>
                 </div>
               ) : (
                 <ul className="flex flex-col">
-                  {txs.map((t, i) => (
-                    <li key={t.id} className="animate-rise" style={{ animationDelay: `${Math.min(i, 8) * 30}ms` }}>
+                  {txs.map((t, i) => {
+                    const k = kindOf(t)
+                    const ahead = t.date > todayKey
+                    return (
+                    <li key={t.id} className={cx('animate-rise', ahead && 'opacity-60')} style={{ animationDelay: `${Math.min(i, 8) * 30}ms` }}>
                       {i > 0 && <div className="h-px bg-esk-border" />}
                       <button
                         type="button"
@@ -423,22 +602,40 @@ export default function Home() {
                         className="-mx-2 flex min-h-[62px] w-[calc(100%+16px)] items-center gap-3 rounded-[18px] px-2 py-2 text-left transition hover:bg-white/[0.03]"
                       >
                         <span className="grid size-[44px] shrink-0 place-items-center rounded-[22px] bg-esk-row">
-                          <CategoryRowIcon category={t.category} name={t.name} />
+                          <TxRowIcon t={t} />
                         </span>
                         <span className="flex min-w-0 flex-1 flex-col gap-[3px] leading-[1.4]">
-                          <span className="truncate font-inter-m text-[15px] font-medium text-white">{t.name}</span>
+                          <span className="flex min-w-0 items-center gap-[6px]">
+                            <span className="truncate font-inter-m text-[15px] font-medium text-white">{t.name}</span>
+                            {t.recurrenceId && <Repeat size={12} className="shrink-0 text-esk-muted" aria-label="recorrente" />}
+                          </span>
                           <span className="truncate font-inter text-[9px] text-esk-muted md:text-[11px]">
-                            {categoryMeta(state, t.category).label} · {methodLabel(state, t)}
+                            {k === 'income'
+                              ? `${incomeLabel(t.category)} · ${accountName(state, t.accountId)}`
+                              : k === 'invoice_payment'
+                                ? `Pagamento de fatura · ${accountName(state, t.accountId)}`
+                                : t.category === null ? methodLabel(state, t) : `${categoryMeta(state, t.category).label} · ${methodLabel(state, t)}`}
+                            {k === 'expense' && t.category === null && (
+                              <span className="ml-1 rounded-[6px] bg-esk-lilac px-[5px] py-px text-esk-ink">sem categoria</span>
+                            )}
+                            {t.installment && (
+                              <span className="ml-1 rounded-[6px] bg-white/[0.08] px-[5px] py-px text-white">
+                                parcela {t.installment.number} de {t.installment.total}
+                              </span>
+                            )}
                             {t.source === 'fatura' && <span className="ml-1 rounded-[6px] bg-esk-lilac px-[5px] py-px text-esk-ink">fatura</span>}
                           </span>
                         </span>
                         <span className="flex shrink-0 flex-col items-end gap-[3px] leading-[1.4] whitespace-nowrap">
-                          <span className="font-inter-m text-[12px] font-medium tracking-[-0.24px] text-white md:text-[14px]">{privateExpense(t.amount, hidden)}</span>
-                          <span className="font-inter text-[10px] text-esk-muted md:text-[11px]">{relativeDay(t.date, TODAY)}</span>
+                          <span className={cx('font-inter-m text-[12px] font-medium tracking-[-0.24px] md:text-[14px]', k === 'income' ? 'text-esk-positive' : 'text-esk-negative')}>
+                            {k === 'income' ? privateIncome(t.amount, hidden) : privateExpense(t.amount, hidden)}
+                          </span>
+                          <span className="font-inter text-[10px] text-esk-muted md:text-[11px]">{ahead ? `prevista ${relativeDay(t.date, TODAY)}` : relativeDay(t.date, TODAY)}</span>
                         </span>
                       </button>
                     </li>
-                  ))}
+                    )
+                  })}
                 </ul>
               )}
               {summary.transactions.length > 6 && (

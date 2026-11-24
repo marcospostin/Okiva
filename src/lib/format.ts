@@ -17,6 +17,13 @@ export const HIDDEN_MONEY = 'R$ ••••••'
 /** Masks a monetary value without changing the underlying financial calculation. */
 export const privateMoney = (value: string, hidden: boolean) => (hidden ? HIDDEN_MONEY : value)
 export const privateExpense = (n: number, hidden: boolean) => (hidden ? `− ${HIDDEN_MONEY}` : expense(n))
+export const income = (n: number) => `+ ${brl(n)}`
+export const privateIncome = (n: number, hidden: boolean) => (hidden ? `+ ${HIDDEN_MONEY}` : income(n))
+/** "7 dez" */
+export const shortDate = (iso: string) => {
+  const d = parseISO(iso)
+  return `${d.getDate()} ${MONTHS[d.getMonth()].slice(0, 3)}`
+}
 
 /** Keeps assistant copy private when it contains a BRL value or an amount per month. */
 export const privateMoneyText = (text: string, hidden: boolean) =>

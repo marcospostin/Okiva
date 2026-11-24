@@ -1,6 +1,6 @@
 import { Camera, Check } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
-import { categoryIds, categoryMeta } from '../data/categories'
+import { categoryIds, categoryMeta, hasCategory } from '../data/categories'
 import type { CategoryId } from '../types'
 import { Asset, CategoryRowIcon } from '../components/icons'
 import { ActionRow, Chip, CountUp, cx, FeatureCard, LinkButton, ListPanel, ListRow, Page, PrimaryButton, ProgressBar, RoundButton, ScreenHeader, SectionHeader } from '../components/ui'
@@ -8,7 +8,7 @@ import { brl, brlShort, monthKey, privateMoney } from '../lib/format'
 import { readInvoice, type InvoiceResult } from '../services/ai'
 import { invoicesApi } from '../services/finance'
 import { errorMessage } from '../services/http'
-import { currentMonth, todayISO, useStore } from '../state/store'
+import { currentMonth, ruleFor, todayISO, useStore } from '../state/store'
 import { useMutation } from '../state/useMutation'
 import { useUI } from '../state/ui'
 
@@ -24,8 +24,8 @@ export default function Invoice() {
   const [error, setError] = useState<string | null>(null)
   const [selected, setSelected] = useState<Set<number>>(new Set())
   const [showAll, setShowAll] = useState(false)
-  /** Category corrections made by the person before confirming */
-  const [cats, setCats] = useState<Record<number, CategoryId>>({})
+  /** Category corrections made by the person before confirming (null = deixar sem categoria) */
+  const [cats, setCats] = useState<Record<number, CategoryId | null>>({})
   const [cardId, setCardId] = useState(state.cards[0]?.id ?? '')
   const hidden = state.hideBalance
   const pdfInput = useRef<HTMLInputElement>(null)
@@ -64,8 +64,9 @@ export default function Invoice() {
     if (phase.name !== 'found') return
     const result = phase.result
     const items = result.items
-      .map((it, i) => ({ ...it, category: cats[i] ?? it.category }))
+      .map((it, i) => ({ ...it, category: categoryOf(i) }))
       .filter((_, i) => selected.has(i))
+    const toSort = items.filter((it) => it.category === null).length
     const card = state.cards.find((c) => c.id === cardId) ?? null
     const ok = await run(
       'confirm',
@@ -88,13 +89,26 @@ export default function Invoice() {
           todayISO(),
         ),
       (r) => dispatch({ type: 'importInvoice', txs: r.transactions, card: r.card, invoice: r.invoice }),
-      (r) => `${r.transactions.length} ${r.transactions.length === 1 ? 'lançamento adicionado' : 'lançamentos adicionados'}`,
+      (r) =>
+        `${r.transactions.length} ${r.transactions.length === 1 ? 'lançamento adicionado' : 'lançamentos adicionados'}${toSort ? ` · ${toSort} para classificar` : ''}`,
       'Não deu para salvar os lançamentos. Tente de novo.',
     )
     if (ok) navigate('home')
   }
 
   const found = phase.name === 'found' ? phase.result : null
+  /** Categoria da IA (se a pessoa ainda tem), senão a regra aprendida pelo nome, senão sem categoria */
+  const aiCategory = (i: number): CategoryId | null => {
+    const it = found?.items[i]
+    if (!it) return null
+    if (it.category && hasCategory(state, it.category)) return it.category
+    return ruleFor(state, it.name) ?? null
+  }
+  const categoryOf = (i: number): CategoryId | null => (i in cats ? cats[i] : aiCategory(i))
+  const learned = (i: number) => !(i in cats) && !!found && !found.items[i].category && aiCategory(i) !== null
+  // Sem categoria primeiro, para ninguém deixar passar
+  const order = found ? found.items.map((_, i) => i).sort((a, b) => Number(categoryOf(b) === null) - Number(categoryOf(a) === null)) : []
+  const pendingItems = order.filter((i) => categoryOf(i) === null).length
   const progress = phase.name === 'reading' ? phase.progress : found ? 100 : 0
   const fileName = phase.name === 'reading' ? phase.file.name : found?.fileName
   const kind = phase.name === 'reading' ? (phase.file.type.startsWith('image/') ? 'Foto' : 'PDF') : found?.kind === 'photo' ? 'Foto' : 'PDF'
@@ -191,7 +205,7 @@ export default function Invoice() {
               <ListRow
                 icon={<Asset name="04670.svg" size={20} />}
                 title="Compras"
-                subtitle="Categorizadas com IA"
+                subtitle={found && pendingItems ? `${pendingItems} sem categoria` : 'Categorizadas com IA'}
                 value={found ? <CountUp value={found.items.length} format={(n) => String(Math.round(n))} /> : <Skeleton active={phase.name === 'reading'} />}
               />
               <ListRow
@@ -230,10 +244,17 @@ export default function Invoice() {
                   </div>
                 )}
 
+                {pendingItems > 0 && (
+                  <p className="rounded-[18px] bg-esk-lilac/10 px-4 py-3 font-sat text-[13px] leading-[1.4] text-esk-lilac ring-1 ring-esk-lilac/30">
+                    {pendingItems === 1 ? '1 compra ficou' : `${pendingItems} compras ficaram`} sem categoria: a IA não reconheceu o nome. Escolha agora ou importe assim e classifique depois na Home.
+                  </p>
+                )}
+
                 <ul className="flex flex-col rounded-[26px] bg-esk-surface p-2">
-                  {(showAll ? found.items : found.items.slice(0, 8)).map((it, idx) => {
+                  {(showAll ? order : order.slice(0, 8)).map((idx) => {
+                    const it = found.items[idx]
                     const on = selected.has(idx)
-                    const category = cats[idx] ?? it.category
+                    const category = categoryOf(idx)
                     return (
                       <li key={idx} className="flex flex-col rounded-[18px] px-2 py-[10px] transition hover:bg-white/[0.03]">
                         <button
@@ -260,24 +281,31 @@ export default function Invoice() {
                         <div className="flex items-center gap-2 pt-1 pl-[70px]">
                           <select
                             aria-label={`Categoria de ${it.name}`}
-                            value={category}
-                            onChange={(e) => setCats((c) => ({ ...c, [idx]: e.target.value as CategoryId }))}
-                            className="cursor-pointer rounded-[10px] bg-transparent py-1 font-sat text-[12px] text-esk-subtle outline-none hover:text-white focus:text-white"
+                            value={category ?? ''}
+                            onChange={(e) => setCats((c) => ({ ...c, [idx]: (e.target.value || null) as CategoryId | null }))}
+                            className={cx(
+                              'cursor-pointer rounded-[10px] bg-transparent py-1 font-sat text-[12px] outline-none hover:text-white focus:text-white',
+                              category === null ? 'text-esk-lilac' : 'text-esk-subtle',
+                            )}
                           >
+                            <option value="" className="bg-esk-elevated text-white">
+                              {category === null ? 'Escolher categoria…' : 'Sem categoria'}
+                            </option>
                             {categoryIds(state).map((c) => (
                               <option key={c} value={c} className="bg-esk-elevated text-white">
                                 {categoryMeta(state, c).label}
                               </option>
                             ))}
                           </select>
-                          {cats[idx] && <span className="font-sat text-[12px] text-esk-lime-soft">ajustado</span>}
+                          {idx in cats && <span className="font-sat text-[12px] text-esk-lime-soft">ajustado</span>}
+                          {learned(idx) && <span className="font-sat text-[12px] text-esk-subtle">· como da última vez</span>}
                           {it.subscription && <span className="font-sat text-[12px] text-esk-subtle">· recorrente</span>}
                         </div>
                       </li>
                     )
                   })}
                 </ul>
-                {found.items.length > 8 && (
+                {order.length > 8 && (
                   <LinkButton onClick={() => setShowAll((v) => !v)}>{showAll ? 'Mostrar menos' : `Ver mais (${found.items.length - 8})`}</LinkButton>
                 )}
 

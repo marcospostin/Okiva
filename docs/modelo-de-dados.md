@@ -3,6 +3,10 @@
 Base para o banco de dados e para o backend. Os tipos do front estão em `src/types.ts`;
 as rotas em [integracao-backend.md](integracao-backend.md).
 
+> **Atualizado em 2026-11-24:** receitas, contas, recorrências, parcelas, pagamento de fatura, categorias editáveis,
+> gasto sem categoria e regras aprendidas estão em [financas-contas-categorias.md](financas-contas-categorias.md).
+> Onde houver diferença, vale aquele documento.
+
 > **Banco real criado no Supabase** (projeto `nbevtdkdzxuebmhvypan`): detalhes, RLS, RPCs e testes em
 > [supabase.md](supabase.md). Diferenças do banco real em relação a este documento:
 > - `users` chama-se **`profiles`** (1:1 com `auth.users`, id = `auth.users.id`); login e senha ficam no Supabase Auth.
@@ -30,7 +34,7 @@ datas `date` (`yyyy-mm-dd`) · meses `char(7)` (`yyyy-mm`) · `created_at`/`upda
 | email | text **unique** | login; não muda pelo app |
 | name | text not null | |
 | avatar_url | text null | |
-| starting_balance | numeric | saldo = starting_balance − soma dos gastos |
+| starting_balance | numeric | legado: hoje 0; o saldo inicial fica em `accounts` |
 | stage | smallint | 1 = manual, 2 = Okiva Plus |
 | hide_balance | boolean | |
 | featured_goal_id | FK → goals null | só uma meta principal |
@@ -42,7 +46,7 @@ datas `date` (`yyyy-mm-dd`) · meses `char(7)` (`yyyy-mm`) · `created_at`/`upda
 | id | PK | |
 | user_id | FK → users | |
 | name | text not null | |
-| category | text not null | id fixo (`moradia`…`outros`) **ou** id de `categories` |
+| category | text null | id de uma categoria da pessoa; **null = gasto sem categoria** (ver financas-contas-categorias.md) |
 | method_type | text | `card` · `pix` · `cash` |
 | card_id | FK → cards null | obrigatório quando `method_type = card` |
 | date | date | não pode ser futura |
@@ -105,7 +109,7 @@ Criar/editar/excluir depósito atualiza `goals.saved` na mesma transação do ba
 | label | text not null | **único por pessoa** sem diferenciar maiúsculas/acentos; também não pode repetir uma fixa |
 | color | text | hex |
 
-Excluir: gastos dela → `outros`; teto dela é removido. Categorias fixas não ficam no banco (constantes).
+Todas as categorias são linhas (as do app têm `key` e podem ser editadas/excluídas). Excluir: gastos ficam sem categoria ou vão para outra escolhida; teto e regras dela são removidos.
 
 ### invoice_imports (faturas importadas)
 | Coluna | Tipo | Regra |
@@ -133,12 +137,16 @@ Excluir = desfazer: apaga os `transactions` com esse `invoice_id` e devolve `pre
 | **Depósito** | Guardar valor → `POST /api/goals/:id/deposits` | Meta → Depósitos (histórico) | toque no depósito → `PUT …/deposits/:depositId` | Excluir depósito → `DELETE …/deposits/:depositId` |
 | **Teto do mês** | card "Defina seu limite" → `PUT /api/budget` | card Este mês | toque no card → `PUT /api/budget` | Remover teto do mês → `DELETE /api/budget` |
 | **Teto por categoria** | Teto por categoria → `PUT /api/budget/caps/:category` | cards de categoria | toque no card → `PUT /api/budget/caps/:category` | Remover teto da categoria → `DELETE /api/budget/caps/:category` |
-| **Categoria** | Minhas categorias / Teto por categoria → `POST /api/categories` | Conta → Minhas categorias | renomear → `PUT /api/categories/:id` | Excluir categoria → `DELETE /api/categories/:id` |
+| **Categoria** | Metas → Categorias → Nova categoria / Teto por categoria → `POST /api/categories` | Metas → Categorias | nome e cor → `PUT /api/categories/:id` | Excluir categoria → `delete_category` (gastos ficam sem categoria ou vão para outra) |
+| **Conta (dinheiro)** | Contas → Nova conta → `accounts` | Home → Ver contas | toque na conta → Editar | Excluir conta (saldo e lançamentos vão para outra) |
+| **Recorrência** | Adicionar → Repetir todo mês | Contas → Recorrentes | toque → editar (vale daqui pra frente) | Encerrar / Apagar recorrência |
+| **Compra parcelada** | Adicionar → Parcelado → `save_installments` | Home (parcela do mês) + detalhe | Detalhe → Editar (substitui todas) | Apagar compra (todas as parcelas) |
+| **Regra aprendida** | Classificar → Sempre usar para esse nome | Metas → Categorias → categoria | classificar de novo troca a categoria | Remover na categoria |
 | **Conversa do assistente** | enviar pergunta → `POST /api/assistant` | chat | — (mensagens não se editam) | Nova conversa (fica só no navegador) |
 
 ## Fora do CRUD (decisões)
 
-- **Saldo** não é tabela: é calculado. "Ajustar saldo" altera `starting_balance`.
-- **Categorias fixas** (Moradia, Alimentação, Transporte, Lazer, Assinaturas, Saúde, Outros) não se editam nem se excluem.
+- **Saldo** não é tabela: é calculado a partir das contas. "Ajustar saldo" altera o saldo inicial da primeira conta.
+- **Categorias do app** (Moradia, Alimentação, …) são sugestões: a pessoa edita e exclui como qualquer outra.
 - **E-mail** não muda pelo app (é o login). Troca de e-mail/senha entra com a autenticação real.
 - **Conversa do assistente** não é salva no servidor (privacidade); fica no `sessionStorage` da aba.

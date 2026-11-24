@@ -10,7 +10,8 @@
  * A tela mostra só as que cabem em duas linhas (fitChips); criar a própria
  * categoria está sempre disponível.
  */
-import { CATEGORIES, findCategoryByLabel, isBuiltin, normalizeLabel } from '../data/categories'
+import { isExpense } from './ledger'
+import { categoryMeta, findCategoryByLabel, hasCategory, isBuiltin, normalizeLabel } from '../data/categories'
 import { TODAY } from '../data/mock'
 import { toISO } from './format'
 import type { AppState, BuiltinCategoryId, CategoryId } from '../types'
@@ -54,7 +55,7 @@ export function suggestCategories(state: Pick<AppState, 'transactions' | 'custom
   const hasCap = (id: CategoryId) => state.budget.caps[id] !== undefined
   const since = new Date(TODAY)
   since.setDate(since.getDate() - WINDOW_DAYS)
-  const recent = state.transactions.filter((t) => t.date >= toISO(since))
+  const recent = state.transactions.filter((t) => isExpense(t) && t.date >= toISO(since))
 
   const byKey = new Map<string, CategorySuggestion>()
   const bump = (s: Omit<CategorySuggestion, 'txIds' | 'matches' | 'amount'>, amount: number, tx?: { id: string; name: string }) => {
@@ -71,18 +72,19 @@ export function suggestCategories(state: Pick<AppState, 'transactions' | 'custom
     // 1. Names that point to a category the person doesn't have yet
     const rule = RULES.find((r) => r.pattern.test(t.name))
     if (rule) {
-      const existingId = rule.target ?? findCategoryByLabel(state, rule.label)
+      // A sugestão só aponta para uma categoria que a pessoa ainda tem
+      const existingId = (rule.target && hasCategory(state, rule.target) ? rule.target : undefined) ?? findCategoryByLabel(state, rule.label)
       // Already in that category: nothing to suggest from the name
       if (existingId !== t.category && !(existingId && hasCap(existingId))) {
         const key = existingId ? `id:${existingId}` : `new:${normalizeLabel(rule.label)}`
-        const label = existingId && isBuiltin(existingId) ? CATEGORIES[existingId].label : rule.label
+        const label = existingId ? categoryMeta(state, existingId).label : rule.label
         bump({ key, label, existingId: existingId ?? undefined, source: 'keyword' }, t.amount, t)
         continue
       }
     }
     // 2. Spend in a category that has no cap yet
-    if (!hasCap(t.category)) {
-      const label = isBuiltin(t.category) ? CATEGORIES[t.category].label : (state.customCategories.find((c) => c.id === t.category)?.label ?? 'Outros')
+    if (t.category !== null && !hasCap(t.category)) {
+      const label = categoryMeta(state, t.category).label
       bump({ key: `id:${t.category}`, label, existingId: t.category, source: 'spend' }, t.amount)
     }
   }
@@ -97,11 +99,11 @@ export function suggestCategories(state: Pick<AppState, 'transactions' | 'custom
 
   // 3. Categories the person created that still have no cap
   for (const c of state.customCategories) {
-    if (!hasCap(c.id)) add({ key: `id:${c.id}`, label: c.label, existingId: c.id, txIds: [], matches: [], amount: 0, source: 'custom' })
+    if (!isBuiltin(c.id) && !hasCap(c.id)) add({ key: `id:${c.id}`, label: c.label, existingId: c.id, txIds: [], matches: [], amount: 0, source: 'custom' })
   }
-  // 4. Base suggestions (the most common ones) fill the rest
+  // 4. Base suggestions (the most common ones the person still has) fill the rest
   for (const id of BASE_ORDER) {
-    if (!hasCap(id)) add({ key: `id:${id}`, label: CATEGORIES[id].label, existingId: id, txIds: [], matches: [], amount: 0, source: 'base' })
+    if (hasCategory(state, id) && !hasCap(id)) add({ key: `id:${id}`, label: categoryMeta(state, id).label, existingId: id, txIds: [], matches: [], amount: 0, source: 'base' })
   }
   return ranked
 }

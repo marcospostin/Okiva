@@ -118,7 +118,7 @@ Na criação, `saved` vira `initialSaved` e `deposited = 0` (a média mensal só
 |--------|------|-------|----------|
 | POST | `/api/categories` | `{ label, color }` | `CustomCategory` |
 | PUT | `/api/categories/:id` | `CustomCategory` | `CustomCategory` |
-| DELETE | `/api/categories/:id` | — | `204` (gastos dela → `outros`; teto dela removido) |
+| DELETE | `/api/categories/:id` | — | `204` (gastos dela ficam sem categoria ou vão para `?moveTo=`; teto e regras dela removidos) |
 | POST | `/api/transactions/recategorize` | `{ ids: string[], category }` | `204` |
 
 `CustomCategory = { id, label, color }`. `category` em gastos e tetos passa a aceitar os ids fixos **ou** o id de uma categoria criada.
@@ -127,6 +127,31 @@ Na criação, `saved` vira `initialSaved` e `deposited = 0` (a média mensal só
 - Nome único por conta, sem diferenciar maiúsculas e acentos ("Manutencao" = "Manutenção") → `409` se repetir.
 - Criar o teto de uma categoria nova chama, nesta ordem: `POST /api/categories` → (se veio de sugestão) `recategorize` → `PUT /api/budget/caps/:id`.
 - As **sugestões** são calculadas no front (`src/lib/categorySuggestions.ts`) a partir do nome dos lançamentos dos últimos 90 dias. Se o servidor quiser sugerir melhor (IA), pode expor `GET /api/categories/suggestions` com o mesmo formato `CategorySuggestion`.
+
+### Contas, recorrências, parcelas e regras (etapas 6–8)
+
+Com Supabase estas operações já existem (tabelas + RPCs, ver [financas-contas-categorias.md](financas-contas-categorias.md)).
+Para uma API HTTP própria, o front chama:
+
+| Método | Rota | Corpo | Resposta |
+|--------|------|-------|----------|
+| POST | `/api/accounts` | `{ name, kind, startingBalance }` | `Account` |
+| PUT | `/api/accounts/:id` | `Account` | `Account` |
+| DELETE | `/api/accounts/:id` | — | `204` (lançamentos e saldo inicial vão para a conta mais antiga) |
+| POST | `/api/recurrences` | `RecurrenceInput` | `AccountSnapshot` (já com o que venceu) |
+| PUT | `/api/recurrences/:id` | `Recurrence` | `AccountSnapshot` |
+| DELETE | `/api/recurrences/:id` | — | `204` (lançamentos feitos continuam) |
+| PUT | `/api/installments` | `{ group?, name, category, cardId, total, count, firstDate }` | `AccountSnapshot` |
+| DELETE | `/api/installments/:group` | — | `204` (todas as parcelas) |
+| PUT | `/api/category-rules` | `{ pattern, category }` | `CategoryRule` |
+| DELETE | `/api/category-rules/:id` | — | `204` |
+| PUT | `/api/budget/caps/:category/alert` | `{ enabled, percent }` | `{ category, alert }` |
+
+- `Transaction` ganha `kind` (`expense` · `income` · `invoice_payment`), `accountId`, `installment`, `recurrenceId`, `posted`;
+  `category` pode ser `null` em gasto (sem categoria).
+- `DELETE /api/categories/:id?moveTo=` — sem `moveTo`, os gastos ficam sem categoria.
+- `POST /api/transactions/recategorize` aceita `category: null`.
+- `AccountSnapshot` ganha `accounts[]`, `recurrences[]`, `categoryRules[]` e `budget.alerts`.
 
 ### Assistente (Plus)
 

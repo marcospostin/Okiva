@@ -1,6 +1,6 @@
 /**
  * Tipos do banco Supabase do Okiva (projeto nbevtdkdzxuebmhvypan).
- * Gerado com generate_typescript_types (Supabase MCP) em 2026-11-22. NÃO editar à mão:
+ * Gerado com generate_typescript_types (Supabase MCP) em 2026-11-24 (etapa 8). NÃO editar à mão:
  * regenere após cada migration (`supabase gen types typescript --project-id nbevtdkdzxuebmhvypan`).
  * Colunas em snake_case; o front usa camelCase (ver docs/supabase.md, seção de mapeamento).
  */
@@ -20,8 +20,51 @@ export type Database = {
   }
   public: {
     Tables: {
+      accounts: {
+        Row: {
+          created_at: string
+          id: string
+          kind: Database["public"]["Enums"]["account_kind"]
+          name: string
+          position: number
+          starting_balance: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          kind?: Database["public"]["Enums"]["account_kind"]
+          name: string
+          position?: number
+          starting_balance?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          kind?: Database["public"]["Enums"]["account_kind"]
+          name?: string
+          position?: number
+          starting_balance?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "accounts_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       budget_caps: {
         Row: {
+          alert_enabled: boolean
+          alert_percent: number
           category: string
           created_at: string
           updated_at: string
@@ -29,6 +72,8 @@ export type Database = {
           value: number
         }
         Insert: {
+          alert_enabled?: boolean
+          alert_percent?: number
           category: string
           created_at?: string
           updated_at?: string
@@ -36,6 +81,8 @@ export type Database = {
           value: number
         }
         Update: {
+          alert_enabled?: boolean
+          alert_percent?: number
           category?: string
           created_at?: string
           updated_at?: string
@@ -102,12 +149,49 @@ export type Database = {
           },
         ]
       }
+      category_rules: {
+        Row: {
+          category: string
+          created_at: string
+          id: string
+          pattern: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          category: string
+          created_at?: string
+          id?: string
+          pattern: string
+          updated_at?: string
+          user_id?: string
+        }
+        Update: {
+          category?: string
+          created_at?: string
+          id?: string
+          pattern?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "category_rules_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       categories: {
         Row: {
           color: string
           created_at: string
           id: string
+          key: string | null
           label: string
+          position: number
           updated_at: string
           user_id: string
         }
@@ -115,7 +199,9 @@ export type Database = {
           color: string
           created_at?: string
           id?: string
+          key?: string | null
           label: string
+          position?: number
           updated_at?: string
           user_id?: string
         }
@@ -123,7 +209,9 @@ export type Database = {
           color?: string
           created_at?: string
           id?: string
+          key?: string | null
           label?: string
+          position?: number
           updated_at?: string
           user_id?: string
         }
@@ -336,50 +424,154 @@ export type Database = {
           },
         ]
       }
-      transactions: {
+      recurrences: {
         Row: {
+          account_id: string | null
           amount: number
           card_id: string | null
           category: string
           created_at: string
-          date: string
+          day: number
+          end_date: string | null
           id: string
-          invoice_id: string | null
+          kind: Database["public"]["Enums"]["tx_kind"]
+          last_run: string | null
           method_type: Database["public"]["Enums"]["payment_method"]
           name: string
+          start_date: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          account_id?: string | null
+          amount: number
+          card_id?: string | null
+          category?: string
+          created_at?: string
+          day: number
+          end_date?: string | null
+          id?: string
+          kind: Database["public"]["Enums"]["tx_kind"]
+          last_run?: string | null
+          method_type?: Database["public"]["Enums"]["payment_method"]
+          name: string
+          start_date?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Update: {
+          account_id?: string | null
+          amount?: number
+          card_id?: string | null
+          category?: string
+          created_at?: string
+          day?: number
+          end_date?: string | null
+          id?: string
+          kind?: Database["public"]["Enums"]["tx_kind"]
+          last_run?: string | null
+          method_type?: Database["public"]["Enums"]["payment_method"]
+          name?: string
+          start_date?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "recurrences_account_fkey"
+            columns: ["account_id", "user_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id", "user_id"]
+          },
+          {
+            foreignKeyName: "recurrences_card_fkey"
+            columns: ["card_id", "user_id"]
+            isOneToOne: false
+            referencedRelation: "cards"
+            referencedColumns: ["id", "user_id"]
+          },
+          {
+            foreignKeyName: "recurrences_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      transactions: {
+        Row: {
+          account_id: string | null
+          amount: number
+          card_id: string | null
+          category: string | null
+          created_at: string
+          date: string
+          id: string
+          installment_group: string | null
+          installment_number: number | null
+          installment_total: number | null
+          invoice_id: string | null
+          kind: Database["public"]["Enums"]["tx_kind"]
+          method_type: Database["public"]["Enums"]["payment_method"]
+          name: string
+          posted: boolean
+          recurrence_id: string | null
           source: Database["public"]["Enums"]["tx_source"]
           updated_at: string
           user_id: string
         }
         Insert: {
+          account_id?: string | null
           amount: number
           card_id?: string | null
-          category?: string
+          category?: string | null
           created_at?: string
           date?: string
           id?: string
+          installment_group?: string | null
+          installment_number?: number | null
+          installment_total?: number | null
           invoice_id?: string | null
+          kind?: Database["public"]["Enums"]["tx_kind"]
           method_type?: Database["public"]["Enums"]["payment_method"]
           name: string
+          posted?: boolean
+          recurrence_id?: string | null
           source?: Database["public"]["Enums"]["tx_source"]
           updated_at?: string
           user_id?: string
         }
         Update: {
+          account_id?: string | null
           amount?: number
           card_id?: string | null
-          category?: string
+          category?: string | null
           created_at?: string
           date?: string
           id?: string
+          installment_group?: string | null
+          installment_number?: number | null
+          installment_total?: number | null
           invoice_id?: string | null
+          kind?: Database["public"]["Enums"]["tx_kind"]
           method_type?: Database["public"]["Enums"]["payment_method"]
           name?: string
+          posted?: boolean
+          recurrence_id?: string | null
           source?: Database["public"]["Enums"]["tx_source"]
           updated_at?: string
           user_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "transactions_account_fkey"
+            columns: ["account_id", "user_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id", "user_id"]
+          },
           {
             foreignKeyName: "transactions_card_fkey"
             columns: ["card_id", "user_id"]
@@ -392,6 +584,13 @@ export type Database = {
             columns: ["invoice_id", "user_id"]
             isOneToOne: false
             referencedRelation: "invoice_imports"
+            referencedColumns: ["id", "user_id"]
+          },
+          {
+            foreignKeyName: "transactions_recurrence_fkey"
+            columns: ["recurrence_id", "user_id"]
+            isOneToOne: false
+            referencedRelation: "recurrences"
             referencedColumns: ["id", "user_id"]
           },
           {
@@ -408,8 +607,23 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      balance_of: { Args: { p_user: string }; Returns: number }
+      card_effect: {
+        Args: {
+          p_amount: number
+          p_kind: Database["public"]["Enums"]["tx_kind"]
+          p_method: Database["public"]["Enums"]["payment_method"]
+          p_posted: boolean
+        }
+        Returns: number
+      }
       clear_my_data: { Args: never; Returns: undefined }
+      delete_category: {
+        Args: { p_category: string; p_move_to?: string }
+        Returns: undefined
+      }
       delete_my_account: { Args: never; Returns: undefined }
+      ensure_default_account: { Args: { p_user: string }; Returns: string }
       import_invoice: {
         Args: {
           p_card_id: string
@@ -422,24 +636,41 @@ export type Database = {
       is_admin: { Args: never; Returns: boolean }
       is_builtin_category: { Args: { p_category: string }; Returns: boolean }
       is_demo: { Args: never; Returns: boolean }
+      is_income_category: { Args: { p_category: string }; Returns: boolean }
       is_valid_category: {
         Args: { p_category: string; p_user: string }
         Returns: boolean
       }
       normalize_label: { Args: { p_label: string }; Returns: string }
+      process_due: { Args: never; Returns: number }
       profile_exists: { Args: { p_user: string }; Returns: boolean }
       recategorize_transactions: {
-        Args: { p_category: string; p_ids: string[] }
+        Args: { p_category: string | null; p_ids: string[] }
         Returns: number
       }
       reorder_cards: { Args: { p_order: string[] }; Returns: undefined }
+      save_installments: {
+        Args: {
+          p_card_id: string
+          p_category: string
+          p_count: number
+          p_first_date: string
+          p_group: string
+          p_name: string
+          p_total: number
+        }
+        Returns: string
+      }
+      seed_default_categories: { Args: { p_user: string }; Returns: undefined }
       seed_demo_account: { Args: never; Returns: undefined }
       set_balance: { Args: { p_balance: number }; Returns: number }
     }
     Enums: {
+      account_kind: "checking" | "savings" | "wallet"
       card_color: "gradient" | "lilac" | "offwhite"
       goal_icon: "plane" | "shield" | "book" | "car" | "target"
       payment_method: "card" | "pix" | "cash"
+      tx_kind: "expense" | "income" | "invoice_payment"
       tx_source: "manual" | "fatura"
     }
     CompositeTypes: {
@@ -568,9 +799,11 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      account_kind: ["checking", "savings", "wallet"],
       card_color: ["gradient", "lilac", "offwhite"],
       goal_icon: ["plane", "shield", "book", "car", "target"],
       payment_method: ["card", "pix", "cash"],
+      tx_kind: ["expense", "income", "invoice_payment"],
       tx_source: ["manual", "fatura"],
     },
   },

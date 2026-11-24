@@ -1,5 +1,5 @@
 import { useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { categoryIds, categoryMeta, findCategoryByLabel, isBuiltin, nextCustomColor } from '../data/categories'
+import { CATEGORY_PALETTE, categoryIds, categoryMeta, findCategoryByLabel, hasCategory, nextCustomColor } from '../data/categories'
 import { chipTextWidth, CHIP, fitChips, suggestCategories } from '../lib/categorySuggestions'
 import { Camera, ChevronRight, FileText, MessageCircle, Plus, Sparkles } from 'lucide-react'
 import { CategoryRowIcon } from '../components/icons'
@@ -7,11 +7,12 @@ import { Avatar, Chip, cx, Field, inputClass, MoneyInput, PrimaryButton, Sheet, 
 import { brl, brlShort, longDate, pct, privateExpense, privateMoney } from '../lib/format'
 import { balanceOf, currentMonth, forgetAccountData, methodLabel, todayISO, useStore } from '../state/store'
 import { deleteLocalAccount, setDemoAvatar, signOut, updateAccount } from '../services/auth'
-import { accountApi, budgetApi, cardsApi, categoriesApi, goalsApi, invoicesApi, transactionsApi } from '../services/finance'
+import { accountApi, budgetApi, cardsApi, categoriesApi, goalsApi, invoicesApi, rulesApi, transactionsApi } from '../services/finance'
 import { setToken, USE_SUPABASE } from '../services/http'
 import { readAvatar } from '../lib/image'
 import { useMutation } from '../state/useMutation'
 import { useUI, type SheetState, type View } from '../state/ui'
+import { BankAccountSheet, CapAlertSheet, CategorizeSheet, ConfirmDelete, EntrySheet, PayInvoiceSheet, RecurrenceSheet, TransactionSheet, useLast } from './MoneySheets'
 import type { CategoryId, Goal, PaymentMethod, Transaction } from '../types'
 
 export default function SheetHost() {
@@ -23,9 +24,19 @@ export default function SheetHost() {
 function SheetSwitch({ sheet, close }: { sheet: SheetState; close: () => void }) {
   switch (sheet.type) {
     case 'add':
-      return <ExpenseSheet close={close} />
+      return <EntrySheet close={close} initialKind={sheet.kind} />
     case 'edit':
-      return <ExpenseSheet close={close} id={sheet.id} />
+      return <EntrySheet close={close} id={sheet.id} />
+    case 'payInvoice':
+      return <PayInvoiceSheet close={close} cardId={sheet.cardId} id={sheet.id} />
+    case 'bankAccount':
+      return <BankAccountSheet close={close} id={sheet.id} />
+    case 'recurrence':
+      return <RecurrenceSheet close={close} id={sheet.id} />
+    case 'categorize':
+      return <CategorizeSheet close={close} id={sheet.id} />
+    case 'capAlert':
+      return <CapAlertSheet close={close} category={sheet.category} />
     case 'tx':
       return <TransactionSheet close={close} id={sheet.id} />
     case 'card':
@@ -55,176 +66,6 @@ function SheetSwitch({ sheet, close }: { sheet: SheetState; close: () => void })
     case 'invoiceImport':
       return <InvoiceImportSheet close={close} id={sheet.id} />
   }
-}
-
-/** Keeps the last value of an entity so a sheet can play its exit animation after the entity is deleted. */
-function useLast<T>(value: T | undefined) {
-  const ref = useRef(value)
-  if (value !== undefined) ref.current = value
-  return ref.current
-}
-
-const methodKey = (m: PaymentMethod) => (m.type === 'card' ? `card:${m.cardId}` : m.type)
-const keyToMethod = (k: string): PaymentMethod => (k.startsWith('card:') ? { type: 'card', cardId: k.slice(5) } : { type: k as 'pix' | 'cash' })
-
-/* ------------------------------------------------- Adicionar / editar gasto */
-
-function ExpenseSheet({ close, id }: { close: () => void; id?: string }) {
-  const { state, dispatch } = useStore()
-  const { openSheet } = useUI()
-  const { run, pending } = useMutation()
-  const hidden = state.hideBalance
-  const existing = useLast(id ? state.transactions.find((t) => t.id === id) : undefined)
-  const [amount, setAmount] = useState(existing?.amount ?? 0)
-  const [name, setName] = useState(existing?.name ?? '')
-  const [category, setCategory] = useState<CategoryId>(existing?.category ?? 'alimentacao')
-  const [method, setMethod] = useState(existing ? methodKey(existing.method) : state.cards[0] ? `card:${state.cards[0].id}` : 'pix')
-  const [date, setDate] = useState(existing?.date ?? todayISO())
-  const [tries, setTries] = useState(0)
-  const amountError = tries && amount <= 0 ? 'Digite o valor da compra.' : undefined
-  const dateError = tries && !date ? 'Escolha a data.' : undefined
-
-  async function save() {
-    setTries((n) => n + 1)
-    if (amount <= 0 || !date) return
-    const tx: Omit<Transaction, 'id'> = {
-      name: name.trim() || categoryMeta(state, category).label,
-      category,
-      method: keyToMethod(method),
-      date,
-      amount,
-      source: existing?.source ?? 'manual',
-    }
-    const ok = existing
-      ? await run('save', () => transactionsApi.update({ ...tx, id: existing.id }), (saved) => dispatch({ type: 'updateTx', tx: saved }), 'Gasto atualizado')
-      : await run('save', () => transactionsApi.create(tx), (saved) => dispatch({ type: 'addTx', tx: saved }), `${privateMoney(brl(amount), hidden)} registrado`)
-    if (ok) close()
-  }
-
-  return (
-    <Sheet title={existing ? 'Editar gasto' : 'Adicionar gasto'} onClose={existing ? () => openSheet({ type: 'tx', id: existing.id }) : close}>
-      <form
-        className="flex flex-col gap-5"
-        onSubmit={(e) => {
-          e.preventDefault()
-          save()
-        }}
-      >
-        <Field label="Valor da compra" htmlFor="amount" error={amountError} attempt={tries}>
-          <MoneyInput id="amount" value={amount} onChange={setAmount} large autoFocus />
-        </Field>
-        <Field label="Descrição (opcional)" htmlFor="name">
-          <input id="name" className={inputClass} placeholder="Mercado, Uber, Netflix…" value={name} onChange={(e) => setName(e.target.value)} maxLength={40} />
-        </Field>
-        <Field label="Categoria">
-          <div className="flex flex-wrap gap-2">
-            {categoryIds(state).map((c) => (
-              <Chip key={c} active={category === c} onClick={() => setCategory(c)}>
-                {categoryMeta(state, c).label}
-              </Chip>
-            ))}
-          </div>
-        </Field>
-        <Field label="Pagamento">
-          <div className="flex flex-wrap gap-2">
-            {state.cards.map((c) => (
-              <Chip key={c.id} active={method === `card:${c.id}`} onClick={() => setMethod(`card:${c.id}`)}>
-                {c.nickname}
-              </Chip>
-            ))}
-            <Chip active={method === 'pix'} onClick={() => setMethod('pix')}>
-              Pix
-            </Chip>
-            <Chip active={method === 'cash'} onClick={() => setMethod('cash')}>
-              Dinheiro
-            </Chip>
-          </div>
-        </Field>
-        <Field label="Data" htmlFor="date" error={dateError} attempt={tries}>
-          <input id="date" type="date" className={inputClass} value={date} max={todayISO()} onChange={(e) => setDate(e.target.value)} />
-        </Field>
-        <PrimaryButton type="submit" className="mt-1" loading={pending === 'save'}>
-          {existing ? 'Salvar alterações' : 'Salvar'}
-        </PrimaryButton>
-      </form>
-    </Sheet>
-  )
-}
-
-/* --------------------------------------------------- Detalhe da compra */
-
-function TransactionSheet({ close, id }: { close: () => void; id: string }) {
-  const { state, dispatch } = useStore()
-  const { openSheet } = useUI()
-  const { run, pending } = useMutation()
-  const hidden = state.hideBalance
-  const [confirming, setConfirming] = useState(false)
-  const t = useLast(state.transactions.find((x) => x.id === id))
-  if (!t) return null
-  const invoice = t.invoiceId ? state.invoices.find((i) => i.id === t.invoiceId) : undefined
-  const rows: [string, string][] = [
-    ['Categoria', categoryMeta(state, t.category).label],
-    ['Pagamento', methodLabel(state, t)],
-    ['Data', longDate(t.date)],
-    ['Origem', t.source === 'fatura' ? 'Lido da fatura (IA)' : 'Digitado por você'],
-  ]
-  return (
-    <Sheet title="Detalhe da compra" onClose={close}>
-      <div className="flex items-center gap-4">
-        <span className="grid size-[56px] place-items-center rounded-full bg-esk-row">
-          <CategoryRowIcon category={t.category} name={t.name} size={24} />
-        </span>
-        <div className="min-w-0">
-          <p className="truncate font-sat text-[17px] font-medium text-white">{t.name}</p>
-          <p className="font-sat text-[34px] leading-[40px] font-medium tracking-[-1.4px] text-white">{privateExpense(t.amount, hidden)}</p>
-        </div>
-      </div>
-      <dl className="mt-6 flex flex-col rounded-[24px] bg-esk-elevated px-5">
-        {rows.map(([k, v], i) => (
-          <div key={k} className={`flex justify-between gap-4 py-4 font-sat text-[15px] ${i ? 'border-t border-esk-border' : ''}`}>
-            <dt className="text-esk-muted">{k}</dt>
-            <dd className="text-right font-medium text-white">{v}</dd>
-          </div>
-        ))}
-      </dl>
-      {invoice && (
-        <button
-          type="button"
-          onClick={() => openSheet({ type: 'invoiceImport', id: invoice.id })}
-          className="mt-3 flex w-full items-center justify-between gap-3 rounded-[20px] px-1 py-2 text-left font-sat text-[14px] font-medium text-esk-lime-soft hover:underline"
-        >
-          <span className="truncate">Ver fatura {invoice.fileName}</span>
-          <ChevronRight size={16} aria-hidden />
-        </button>
-      )}
-      {confirming ? (
-        <div className="mt-6 flex animate-rise flex-col gap-3">
-          <p className="font-sat text-[15px] text-white">Apagar este gasto? O saldo e o mês voltam ao que eram.</p>
-          <div className="grid grid-cols-2 gap-3">
-            <PrimaryButton tone="dark" onClick={() => setConfirming(false)} disabled={!!pending}>
-              Cancelar
-            </PrimaryButton>
-            <PrimaryButton
-              loading={pending === 'delete'}
-              loadingText="Apagando…"
-              onClick={async () => {
-                if (await run('delete', () => transactionsApi.remove(t.id), () => dispatch({ type: 'deleteTx', id: t.id }), 'Gasto apagado', 'Não deu para apagar. Tente de novo.')) close()
-              }}
-            >
-              Apagar
-            </PrimaryButton>
-          </div>
-        </div>
-      ) : (
-        <div className="mt-6 grid grid-cols-2 gap-3">
-          <PrimaryButton tone="danger" onClick={() => setConfirming(true)}>
-            Apagar
-          </PrimaryButton>
-          <PrimaryButton onClick={() => openSheet({ type: 'edit', id: t.id })}>Editar</PrimaryButton>
-        </div>
-      )}
-    </Sheet>
-  )
 }
 
 /* ------------------------------------------------- Novo / editar cartão */
@@ -357,15 +198,15 @@ function GoalSheet({ close, id }: { close: () => void; id?: string }) {
         <Field label="Data (opcional)" htmlFor="gdate" error={show(errors.deadline)} attempt={tries}>
           <input id="gdate" type="month" className={inputClass} value={deadline} min={currentMonth()} onChange={(e) => setDeadline(e.target.value)} />
         </Field>
-        <div className="flex items-center justify-between gap-4 rounded-[22px] bg-esk-elevated p-4">
-          <span className="flex flex-col">
-            <span className="font-sat text-[15px] font-medium text-white">{goal ? 'Tornar meta principal' : 'Criar como meta principal'}</span>
-            <span className="font-sat text-[12px] text-esk-subtle">
-              {isMain ? 'Para trocar, defina outra meta como principal.' : 'A meta principal atual passa para as secundárias.'}
+        {!goal && state.goals.length > 0 && (
+          <div className="flex items-center justify-between gap-4 rounded-[22px] bg-esk-elevated p-4">
+            <span className="flex flex-col">
+              <span className="font-sat text-[15px] font-medium text-white">Criar como meta principal</span>
+              <span className="font-sat text-[12px] text-esk-subtle">A meta principal atual passa para as secundárias.</span>
             </span>
-          </span>
-          <Switch label="Meta principal" checked={makeMain} onChange={(v) => !isMain && setMakeMain(v)} />
-        </div>
+            <Switch label="Meta principal" checked={makeMain} onChange={setMakeMain} />
+          </div>
+        )}
         <PrimaryButton type="submit" loading={pending === 'save'}>
           {goal ? 'Salvar meta' : 'Criar meta'}
         </PrimaryButton>
@@ -401,28 +242,47 @@ function SaveSheet({ close, goalId }: { close: () => void; goalId: string }) {
   const { run, pending } = useMutation()
   const hidden = state.hideBalance
   const goal = useLast(state.goals.find((g) => g.id === goalId))
-  const [amount, setAmount] = useState(500)
+  const [amount, setAmount] = useState(0)
+  const [makeMain, setMakeMain] = useState(false)
   if (!goal) return null
+  const isMain = (state.featuredGoalId || state.goals[0]?.id) === goal.id
   const after = goal.saved + amount
   const reaches = goal.saved < goal.target && after >= goal.target
+  const featuring = makeMain && !isMain
+  const nothing = amount <= 0 && !featuring
+  const message = () => {
+    const saved = amount > 0 ? (reaches ? `Meta ${goal.name} atingida! 🎉` : `${privateMoney(brlShort(amount), hidden)} guardados em ${goal.name}`) : ''
+    if (!featuring) return saved
+    return saved ? `${saved} · agora é sua meta principal` : `${goal.name} agora é sua meta principal`
+  }
   return (
-    <Sheet title={`Guardar em ${goal.name}`} onClose={close}>
+    <Sheet title={goal.name} onClose={close}>
       <form
         className="flex flex-col gap-5"
         onSubmit={async (e) => {
           e.preventDefault()
-          if (amount <= 0) return
+          if (nothing) return
           const ok = await run(
             'save',
-            () => goalsApi.deposit(goalId, amount, todayISO()),
-            (deposit) => dispatch({ type: 'deposit', deposit }),
-            reaches ? `Meta ${goal.name} atingida! 🎉` : `${privateMoney(brlShort(amount), hidden)} guardados em ${goal.name}`,
+            async () => {
+              const deposit = amount > 0 ? await goalsApi.deposit(goalId, amount, todayISO()) : null
+              if (featuring) await goalsApi.update({ ...goal, featured: true })
+              return deposit
+            },
+            (deposit) => {
+              if (deposit) dispatch({ type: 'deposit', deposit })
+              if (featuring) dispatch({ type: 'feature', goalId: goal.id })
+            },
+            message(),
           )
           if (ok) close()
         }}
       >
-        <Field label="Quanto você guardou" htmlFor="save">
-          <MoneyInput id="save" value={amount} onChange={setAmount} large autoFocus />
+        {isMain && (
+          <p className="-mt-2 inline-flex items-center gap-2 self-start rounded-full bg-esk-lime/10 px-3 py-1 font-sat text-[12px] font-medium text-esk-lime">Meta principal</p>
+        )}
+        <Field label="Guardar agora (opcional)" htmlFor="save">
+          <MoneyInput id="save" value={amount} onChange={setAmount} large />
         </Field>
         <div className="flex flex-wrap gap-2">
           {[100, 250, 500, 1000].map((v) => (
@@ -433,7 +293,7 @@ function SaveSheet({ close, goalId }: { close: () => void; goalId: string }) {
         </div>
         <div className="rounded-[22px] bg-esk-elevated p-5">
           <div className="flex justify-between font-sat text-[14px]">
-            <span className="text-esk-muted">Depois de guardar</span>
+            <span className="text-esk-muted">{amount > 0 ? 'Depois de guardar' : 'Guardado até agora'}</span>
             <span key={pct(after, goal.target)} className="animate-check-pop font-medium text-white">
               {pct(after, goal.target)}%
             </span>
@@ -443,8 +303,17 @@ function SaveSheet({ close, goalId }: { close: () => void; goalId: string }) {
           </p>
           {reaches && <p className="animate-rise pt-2 font-sat text-[13px] font-medium text-esk-lime">Com esse valor você atinge a meta!</p>}
         </div>
-        <PrimaryButton type="submit" disabled={amount <= 0} loading={pending === 'save'} loadingText="Guardando…">
-          Guardar {privateMoney(brlShort(amount), hidden)}
+        {!isMain && (
+          <div className="flex items-center justify-between gap-4 rounded-[22px] bg-esk-elevated p-4">
+            <span className="flex flex-col">
+              <span className="font-sat text-[15px] font-medium text-white">Tornar meta principal</span>
+              <span className="font-sat text-[12px] text-esk-subtle">A meta principal atual passa para as secundárias.</span>
+            </span>
+            <Switch label="Tornar meta principal" checked={makeMain} onChange={setMakeMain} />
+          </div>
+        )}
+        <PrimaryButton type="submit" disabled={nothing} loading={pending === 'save'}>
+          Salvar
         </PrimaryButton>
         <button type="button" onClick={() => openSheet({ type: 'goal', id: goal.id })} className="font-sat text-[14px] font-medium text-esk-lime-soft">
           Editar meta
@@ -505,7 +374,7 @@ function BudgetSheet({ close, category }: { close: () => void; category?: Catego
             Remover teto do mês
           </PrimaryButton>
         )}
-        {category && !isBuiltin(category) && (
+        {category && hasCategory(state, category) && (
           <button type="button" onClick={() => openSheet({ type: 'category', id: category })} className="font-sat text-[14px] font-medium text-esk-lime-soft">
             Editar categoria {categoryMeta(state, category).label}
           </button>
@@ -611,10 +480,6 @@ function AccountSheet({ close }: { close: () => void }) {
         <button type="button" onClick={() => openSheet({ type: 'balance' })} className="flex items-center justify-between gap-4 py-4 text-left transition hover:opacity-80">
           <span className="font-sat text-[15px] text-white">Ajustar saldo</span>
           <span className="font-sat text-[14px] text-esk-muted">{privateMoney(brlShort(balanceOf(state)), state.hideBalance)}</span>
-        </button>
-        <button type="button" onClick={() => openSheet({ type: 'categories' })} className="flex items-center justify-between gap-4 border-t border-esk-border py-4 text-left transition hover:opacity-80">
-          <span className="font-sat text-[15px] text-white">Minhas categorias</span>
-          <span className="font-sat text-[14px] text-esk-muted">{state.customCategories.length || 'Nenhuma'}</span>
         </button>
         <div className="flex items-center justify-between gap-4 border-t border-esk-border py-4">
           <span className="font-sat text-[15px] text-white">Ocultar saldo</span>
@@ -1117,13 +982,14 @@ function CategoriesSheet({ close }: { close: () => void }) {
   const { state } = useStore()
   const { openSheet } = useUI()
   const hidden = state.hideBalance
-  const uses = (id: string) => state.transactions.filter((t) => t.category === id).length
+  const uses = (id: string) => state.transactions.filter((t) => t.category === id && (t.kind ?? 'expense') === 'expense').length
   return (
-    <Sheet title="Minhas categorias" onClose={close}>
+    <Sheet title="Categorias" onClose={close}>
       <div className="flex flex-col gap-5">
+        <p className="-mt-2 font-sat text-[13px] text-esk-muted">As que vieram com o app são sugestões: renomeie, troque a cor ou exclua as que não usa.</p>
         {state.customCategories.length === 0 ? (
           <p className="rounded-[18px] bg-esk-elevated px-4 py-4 font-sat text-[14px] text-esk-muted">
-            Crie categorias para separar seus gastos do seu jeito, como Pets ou Manutenção.
+            Nenhuma categoria. Crie as que fazem sentido para você, como Mercado, Pets ou Manutenção.
           </p>
         ) : (
           <div className="flex flex-col rounded-[24px] bg-esk-elevated px-4">
@@ -1150,7 +1016,6 @@ function CategoriesSheet({ close }: { close: () => void }) {
           </div>
         )}
         <PrimaryButton onClick={() => openSheet({ type: 'category' })}>Nova categoria</PrimaryButton>
-        <p className="font-sat text-[12px] text-esk-subtle">As categorias padrão (Moradia, Alimentação, Transporte…) não podem ser editadas.</p>
       </div>
     </Sheet>
   )
@@ -1162,8 +1027,12 @@ function CategorySheet({ id }: { close: () => void; id?: string }) {
   const { run, pending } = useMutation()
   const cat = useLast(id ? state.customCategories.find((c) => c.id === id) : undefined)
   const [name, setName] = useState(cat?.label ?? '')
+  const [color, setColor] = useState(cat?.color ?? nextCustomColor(state.customCategories))
   const [tries, setTries] = useState(0)
   const [confirm, setConfirm] = useState(false)
+  const others = state.customCategories.filter((c) => c.id !== cat?.id)
+  // Padrão: os gastos ficam sem categoria e aparecem para classificar (nada vai para "Outros" sem a pessoa decidir)
+  const [moveTo, setMoveTo] = useState<CategoryId | null>(null)
   const trimmed = name.trim()
   const clash = trimmed ? findCategoryByLabel(state, trimmed) : undefined
   const nameError = tries
@@ -1174,16 +1043,20 @@ function CategorySheet({ id }: { close: () => void; id?: string }) {
         : undefined
     : undefined
   const back = () => openSheet({ type: 'categories' })
-  const uses = cat ? state.transactions.filter((t) => t.category === cat.id).length : 0
+  const uses = cat ? state.transactions.filter((t) => t.category === cat.id && (t.kind ?? 'expense') === 'expense').length : 0
+  const recs = cat ? state.recurrences.filter((r) => r.category === cat.id && r.kind === 'expense').length : 0
   const hasCap = !!cat && state.budget.caps[cat.id] !== undefined
+  const needsTarget = uses + recs > 0
+  const rules = cat ? state.categoryRules.filter((r) => r.category === cat.id) : []
+  const target = moveTo === null ? 'sem categoria' : `para ${categoryMeta(state, moveTo).label}`
 
   async function save() {
     setTries((n) => n + 1)
     if (!trimmed || (clash && clash !== cat?.id)) return
     const label = capitalize(trimmed)
     const ok = cat
-      ? await run('save', () => categoriesApi.update({ ...cat, label }), (c) => dispatch({ type: 'addCategory', category: c }), 'Categoria atualizada')
-      : await run('save', () => categoriesApi.create({ label, color: nextCustomColor(state.customCategories) }), (c) => dispatch({ type: 'addCategory', category: c }), `Categoria ${label} criada`)
+      ? await run('save', () => categoriesApi.update({ ...cat, label, color }), (c) => dispatch({ type: 'addCategory', category: c }), 'Categoria atualizada')
+      : await run('save', () => categoriesApi.create({ label, color }), (c) => dispatch({ type: 'addCategory', category: c }), `Categoria ${label} criada`)
     if (ok) back()
   }
 
@@ -1191,28 +1064,80 @@ function CategorySheet({ id }: { close: () => void; id?: string }) {
     <Sheet title={cat ? cat.label : 'Nova categoria'} onClose={back}>
       <form className="flex flex-col gap-5" onSubmit={(e) => { e.preventDefault(); save() }}>
         <Field label="Nome da categoria" htmlFor="ecat" error={nameError} attempt={tries}>
-          <input id="ecat" className={inputClass} placeholder="Manutenção, Pets, Academia…" value={name} onChange={(e) => setName(e.target.value)} maxLength={24} autoFocus autoComplete="off" />
+          <input id="ecat" className={inputClass} placeholder="Mercado, Pets, Academia…" value={name} onChange={(e) => setName(e.target.value)} maxLength={24} autoFocus={!cat} autoComplete="off" />
+        </Field>
+        <Field label="Cor">
+          <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Cor da categoria">
+            {CATEGORY_PALETTE.map((c) => (
+              <button
+                key={c}
+                type="button"
+                role="radio"
+                aria-checked={color.toLowerCase() === c}
+                aria-label={c}
+                onClick={() => setColor(c)}
+                className={cx('size-[34px] rounded-full ring-offset-2 ring-offset-esk-surface transition active:scale-90', color.toLowerCase() === c ? 'ring-2 ring-white' : 'ring-1 ring-black/20')}
+                style={{ backgroundColor: c }}
+              />
+            ))}
+          </div>
         </Field>
         {cat && (
           <p className="-mt-2 font-sat text-[13px] text-esk-subtle">
-            {plural(uses, 'lançamento usa', 'lançamentos usam')} essa categoria{hasCap ? ' e ela tem teto em Metas' : ''}.
+            {plural(uses, 'lançamento usa', 'lançamentos usam')} essa categoria{recs ? ` · ${plural(recs, 'recorrência', 'recorrências')}` : ''}{hasCap ? ' · tem teto em Metas' : ''}.
           </p>
         )}
         <PrimaryButton type="submit" loading={pending === 'save'}>
           {cat ? 'Salvar categoria' : 'Criar categoria'}
         </PrimaryButton>
+        {cat && rules.length > 0 && (
+          <div className="flex flex-col gap-2">
+            <p className="font-sat text-[13px] font-medium text-esk-muted">Nomes que entram aqui sozinhos</p>
+            <div className="flex flex-col rounded-[20px] bg-esk-elevated px-4">
+              {rules.map((r, i) => (
+                <div key={r.id} className={cx('flex items-center justify-between gap-3 py-3', i > 0 && 'border-t border-esk-border')}>
+                  <span className="min-w-0 truncate font-sat text-[14px] text-white">{r.pattern}</span>
+                  <button
+                    type="button"
+                    disabled={!!pending}
+                    onClick={() => run(`rule-${r.id}`, () => rulesApi.remove(r.id), () => dispatch({ type: 'deleteRule', id: r.id }), 'Regra removida')}
+                    className="shrink-0 font-sat text-[13px] font-medium text-esk-lilac hover:underline disabled:opacity-40"
+                  >
+                    Remover
+                  </button>
+                </div>
+              ))}
+            </div>
+            <p className="font-sat text-[12px] text-esk-subtle">Aprendidos quando você classifica um gasto. Faturas novas com esses nomes já entram nesta categoria.</p>
+          </div>
+        )}
+        {cat && confirm && needsTarget && (
+          <Field label="Os lançamentos dela">
+            <div className="flex flex-wrap gap-2">
+              <Chip active={moveTo === null} onClick={() => setMoveTo(null)}>
+                Deixar sem categoria
+              </Chip>
+              {others.map((c) => (
+                <Chip key={c.id} active={moveTo === c.id} onClick={() => setMoveTo(c.id)}>
+                  {c.label}
+                </Chip>
+              ))}
+            </div>
+          </Field>
+        )}
         {cat && (
-          <ConfirmDelete
-            open={confirm}
-            onOpen={() => setConfirm(true)}
-            onCancel={() => setConfirm(false)}
-            label="Excluir categoria"
-            question={`Excluir ${cat.label}? ${uses ? `${plural(uses, 'lançamento passa', 'lançamentos passam')} para Outros` : 'Nenhum lançamento usa essa categoria'}${hasCap ? ' e o teto dela é removido' : ''}.`}
-            loading={pending === 'delete'}
-            onConfirm={async () => {
-              if (await run('delete', () => categoriesApi.remove(cat.id), () => dispatch({ type: 'deleteCategory', id: cat.id }), `Categoria ${cat.label} excluída`, 'Não deu para excluir. Tente de novo.')) back()
-            }}
-          />
+            <ConfirmDelete
+              open={confirm}
+              onOpen={() => setConfirm(true)}
+              onCancel={() => setConfirm(false)}
+              label="Excluir categoria"
+              question={`Excluir ${cat.label}? ${uses ? `${plural(uses, 'gasto fica', 'gastos ficam')} ${target}` : 'Nenhum gasto usa essa categoria'}${recs ? `; ${plural(recs, 'recorrência vai', 'recorrências vão')} para ${moveTo === null ? 'Outros' : categoryMeta(state, moveTo).label}` : ''}${hasCap ? ' e o teto dela é removido' : ''}.`}
+              loading={pending === 'delete'}
+              onConfirm={async () => {
+                const to = needsTarget ? moveTo : null
+                if (await run('delete', () => categoriesApi.remove(cat.id, to), () => dispatch({ type: 'deleteCategory', id: cat.id, moveTo: to }), `Categoria ${cat.label} excluída`, 'Não deu para excluir. Tente de novo.')) back()
+              }}
+            />
         )}
       </form>
     </Sheet>
@@ -1262,7 +1187,7 @@ function InvoiceImportSheet({ close, id }: { close: () => void; id: string }) {
                     <span className="truncate font-sat text-[15px] font-medium text-white">{t.name}</span>
                     <span className="font-sat text-[12px] text-esk-subtle">{categoryMeta(state, t.category).label} · {longDate(t.date)}</span>
                   </span>
-                  <span className="font-sat text-[15px] font-medium whitespace-nowrap text-white">{privateExpense(t.amount, hidden)}</span>
+                  <span className="font-sat text-[15px] font-medium whitespace-nowrap text-esk-negative">{privateExpense(t.amount, hidden)}</span>
                 </button>
               ))}
             </div>
@@ -1286,44 +1211,5 @@ function InvoiceImportSheet({ close, id }: { close: () => void; id: string }) {
         />
       </div>
     </Sheet>
-  )
-}
-
-function ConfirmDelete({
-  open,
-  onOpen,
-  onCancel,
-  onConfirm,
-  label,
-  question,
-  loading,
-}: {
-  open: boolean
-  onOpen: () => void
-  onCancel: () => void
-  onConfirm: () => void
-  label: string
-  question: string
-  loading?: boolean
-}) {
-  if (!open) {
-    return (
-      <PrimaryButton tone="danger" onClick={onOpen}>
-        {label}
-      </PrimaryButton>
-    )
-  }
-  return (
-    <div className="flex animate-rise flex-col gap-3 rounded-[22px] bg-esk-elevated p-4">
-      <p className="font-sat text-[14px] text-white">{question}</p>
-      <div className="grid grid-cols-2 gap-3">
-        <PrimaryButton tone="dark" onClick={onCancel} disabled={loading}>
-          Cancelar
-        </PrimaryButton>
-        <PrimaryButton onClick={onConfirm} loading={loading} loadingText="Removendo…">
-          Confirmar
-        </PrimaryButton>
-      </div>
-    </div>
   )
 }

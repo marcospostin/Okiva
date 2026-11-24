@@ -14,6 +14,10 @@
 --   depósitos    = dia min(5, hoje) de cada um dos últimos N meses
 -- Idempotente: se o usuário demo já existir, não faz nada.
 -- Rodar como postgres/service (SQL Editor ou supabase db reset).
+--
+-- Modelo atual (etapas 6–8): o cadastro em auth.users já cria as categorias sugeridas
+-- (handle_new_user). O saldo gravado em profiles.starting_balance vira o saldo da conta
+-- "Principal" no primeiro acesso (process_due -> ensure_default_account), sem mudar o valor mostrado.
 -- =============================================================================
 
 do $$

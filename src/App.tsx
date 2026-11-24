@@ -14,6 +14,7 @@ const loadSheets = () => import('./sheets/SheetHost')
 const loadAssistant = () => import('./screens/Assistant')
 const Cards = lazy(() => import('./screens/Cards'))
 const Goals = lazy(() => import('./screens/Goals'))
+const Accounts = lazy(() => import('./screens/Accounts'))
 const Invoice = lazy(() => import('./screens/Invoice'))
 const Assistant = lazy(loadAssistant)
 const SheetHost = lazy(loadSheets)
@@ -79,6 +80,7 @@ function Screen() {
           {view === 'home' && <Home />}
           {view === 'cards' && <Cards />}
           {view === 'goals' && <Goals />}
+          {view === 'accounts' && <Accounts />}
           {view === 'invoice' && state.stage === 2 && <Invoice />}
           {view === 'assistant' && state.stage === 2 && <Assistant />}
         </Suspense>
