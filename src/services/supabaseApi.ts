@@ -224,6 +224,7 @@ export async function loadAccount(): Promise<AppState> {
     user,
     stage: (profile.stage === 1 ? 1 : 2) as Stage,
     hideBalance: profile.hide_balance,
+    highlightInstallments: profile.highlight_installments ?? true,
     startingBalance: num(profile.starting_balance),
     transactions: txs.map(toTx),
     accounts: accounts.map(toAccount),
@@ -245,10 +246,15 @@ export async function loadAccount(): Promise<AppState> {
   }
 }
 
-/** Preferências que o app muda sem serviço próprio (Okiva Plus, ocultar saldo). */
-export async function savePrefs(prefs: { stage: Stage; hideBalance: boolean }) {
+/** Preferências que o app muda sem serviço próprio (Okiva Plus, ocultar saldo, destacar parceladas). */
+export async function savePrefs(prefs: { stage: Stage; hideBalance: boolean; highlightInstallments: boolean }) {
   const id = await uid()
-  await run(sb().from('profiles').update({ stage: prefs.stage, hide_balance: prefs.hideBalance }).eq('id', id))
+  await run(
+    sb()
+      .from('profiles')
+      .update({ stage: prefs.stage, hide_balance: prefs.hideBalance, highlight_installments: prefs.highlightInstallments })
+      .eq('id', id),
+  )
 }
 
 async function updateProfile(patch: Partial<Pick<User, 'name' | 'avatar'>>): Promise<Partial<User>> {
@@ -274,7 +280,7 @@ async function updateProfile(patch: Partial<Pick<User, 'name' | 'avatar'>>): Pro
 
 export const sbAccountApi = {
   snapshot: async (): Promise<AccountSnapshot> => {
-    const { user: _u, stage: _s, hideBalance: _h, ...snapshot } = await loadAccount()
+    const { user: _u, stage: _s, hideBalance: _h, highlightInstallments: _i, ...snapshot } = await loadAccount()
     return snapshot
   },
   updateProfile,

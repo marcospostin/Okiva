@@ -193,6 +193,8 @@ export interface AppState {
   user: User | null
   stage: Stage
   hideBalance: boolean
+  /** Bloco "Compras parceladas" na Home (Conta → Preferências). Ausente em dados antigos = ligado. */
+  highlightInstallments?: boolean
   /** Legado (antes das contas). Hoje o saldo inicial fica em cada conta; vale 0 depois da migração. */
   startingBalance: number
   transactions: Transaction[]

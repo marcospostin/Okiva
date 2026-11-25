@@ -23,6 +23,7 @@ type Action =
   | { type: 'setAvatar'; avatar?: string }
   | { type: 'setStage'; stage: Stage }
   | { type: 'toggleHide' }
+  | { type: 'toggleInstallments' }
   /** Entities arrive with the id the server (or the mock) gave them */
   | { type: 'addTx'; tx: Transaction }
   | { type: 'updateTx'; tx: Transaction }
@@ -106,11 +107,13 @@ function reducer(state: AppState, action: Action): AppState {
     case 'setAvatar':
       return state.user ? { ...state, user: { ...state.user, avatar: action.avatar } } : state
     case 'clearData':
-      return state.user ? { ...emptyState(state.user, 0), stage: state.stage, hideBalance: state.hideBalance } : state
+      return state.user ? { ...emptyState(state.user, 0), stage: state.stage, hideBalance: state.hideBalance, highlightInstallments: state.highlightInstallments } : state
     case 'setStage':
       return { ...state, stage: action.stage }
     case 'toggleHide':
       return { ...state, hideBalance: !state.hideBalance }
+    case 'toggleInstallments':
+      return { ...state, highlightInstallments: state.highlightInstallments === false }
     case 'addTx': {
       const tx = action.tx
       return { ...state, transactions: [tx, ...state.transactions], cards: invoiceOf(state.cards, tx, 1) }
@@ -420,15 +423,16 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       prefs.current = null
       return
     }
-    const key = `${state.stage}|${state.hideBalance}`
+    const highlightInstallments = state.highlightInstallments !== false
+    const key = `${state.stage}|${state.hideBalance}|${highlightInstallments}`
     if (prefs.current === null) {
       prefs.current = key
       return
     }
     if (prefs.current === key) return
     prefs.current = key
-    savePrefs({ stage: state.stage, hideBalance: state.hideBalance }).catch(() => undefined)
-  }, [state.stage, state.hideBalance, state.user])
+    savePrefs({ stage: state.stage, hideBalance: state.hideBalance, highlightInstallments }).catch(() => undefined)
+  }, [state.stage, state.hideBalance, state.highlightInstallments, state.user])
   const value = useMemo(() => ({ state, dispatch }), [state])
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>
 }

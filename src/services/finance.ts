@@ -49,13 +49,13 @@ export interface ImportInvoiceResult {
 }
 
 /** Dados que o backend devolve no login / ao abrir o app. */
-export type AccountSnapshot = Omit<AppState, 'user' | 'stage' | 'hideBalance'>
+export type AccountSnapshot = Omit<AppState, 'user' | 'stage' | 'hideBalance' | 'highlightInstallments'>
 
 export type AccountInput = Omit<Account, 'id'>
 export type RecurrenceInput = Omit<Recurrence, 'id' | 'lastRun'>
 export type { InstallmentInput }
 
-const snapshotOf = ({ user: _u, stage: _s, hideBalance: _h, ...rest }: AppState): AccountSnapshot => rest
+const snapshotOf = ({ user: _u, stage: _s, hideBalance: _h, highlightInstallments: _i, ...rest }: AppState): AccountSnapshot => rest
 const today = () => toISO(TODAY)
 
 /* ------------------------------------------------------------- mock helpers */

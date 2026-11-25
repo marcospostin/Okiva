@@ -382,6 +382,7 @@ export type Database = {
           email: string
           featured_goal_id: string | null
           hide_balance: boolean
+          highlight_installments: boolean
           id: string
           name: string
           notification_prefs: Json
@@ -396,6 +397,7 @@ export type Database = {
           email: string
           featured_goal_id?: string | null
           hide_balance?: boolean
+          highlight_installments?: boolean
           id: string
           name: string
           notification_prefs?: Json
@@ -410,6 +412,7 @@ export type Database = {
           email?: string
           featured_goal_id?: string | null
           hide_balance?: boolean
+          highlight_installments?: boolean
           id?: string
           name?: string
           notification_prefs?: Json

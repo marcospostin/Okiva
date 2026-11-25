@@ -4,6 +4,7 @@ import { categoryMeta, UNCATEGORIZED } from '../data/categories'
 import { Asset, CategoryRowIcon, CategoryTileIcon } from '../components/icons'
 import { Avatar, CountUp, cx, Page, SearchField, SearchSummary } from '../components/ui'
 import { searchTransactions } from '../lib/search'
+import { InstallmentsBlock } from '../components/InstallmentsBlock'
 import { brl, brlShort, capitalize, privateExpense, privateIncome, privateMoney, monthName, pct, relativeDay } from '../lib/format'
 import { incomeLabel, kindOf } from '../lib/ledger'
 import { TODAY } from '../data/mock'
@@ -671,6 +672,16 @@ export default function Home() {
                 <p className="font-inter-m text-[11px] font-medium tracking-[1.1px]">TRANSAÇÕES</p>
                 <p className="font-inter text-[10px]">{summary.income > 0 ? `${privateIncome(summary.income, hidden)} de receitas` : 'Registradas por você'}</p>
               </div>
+
+              {state.highlightInstallments !== false && !searching && (
+                <InstallmentsBlock
+                  state={state}
+                  month={month}
+                  today={todayKey}
+                  onPickMonth={setMonth}
+                  onOpenTx={(id) => openSheet({ type: 'tx', id })}
+                />
+              )}
 
               {state.transactions.length > 0 && (
                 <div className="flex flex-col gap-2">
