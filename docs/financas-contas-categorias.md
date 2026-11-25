@@ -122,6 +122,13 @@ Para os e-mails saírem em português e com o código, cole no Supabase (Authent
 `supabase/templates/codigo-confirmacao.html` em **Magic link**, `redefinir-senha.html` em **Reset password** e
 `trocar-email.html` em **Change email address**.
 
+## E-mails (envio)
+
+Os e-mails do Supabase Auth saem pelo Gmail do projeto **okiva.financial@gmail.com** (SMTP próprio em
+Authentication → Emails → SMTP Settings: `smtp.gmail.com`, porta 465, usuário = o Gmail, senha = senha de app do Google,
+guardada só no painel do Supabase). Limite do Gmail: ~500 e-mails/dia, suficiente para portfólio. O mesmo endereço é o
+e-mail de suporte do app (`SUPPORT_EMAIL` em `src/services/settings.ts`).
+
 ## Pendências conhecidas
 
 - O site publicado na Vercel usa o código anterior a estas etapas e lê o saldo em `profiles.starting_balance` (agora 0):

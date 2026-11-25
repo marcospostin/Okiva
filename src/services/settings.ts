@@ -11,8 +11,8 @@ import { authError } from './auth'
 
 export const APP_VERSION = '1.1.0'
 
-/** Endereço de suporte mostrado em Ajuda (troque pelo e-mail real do Okiva). */
-export const SUPPORT_EMAIL = 'suporte@okiva.app'
+/** Endereço de suporte (Ajuda, Política de privacidade). É o mesmo Gmail que envia os e-mails do Supabase. */
+export const SUPPORT_EMAIL = 'okiva.financial@gmail.com'
 
 /** Lojas para "Avaliar o Okiva". Vazio = app ainda não publicado nessa loja. */
 export const STORE_URLS = { ios: '', android: '' }
