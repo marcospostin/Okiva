@@ -46,14 +46,16 @@ export function purchasesInMonth(state: Pick<AppState, 'transactions'>, month: s
     const current = list.find((t) => monthKey(t.date) === month)
     if (!current) continue
     const last = list[list.length - 1]
+    // Compra que começou antes do Okiva: as parcelas anteriores à primeira lançada já foram pagas
+    const before = list[0].installment!.number - 1
     out.push({
       group,
       name: current.name,
       cardId: current.method.type === 'card' ? current.method.cardId : undefined,
       current,
       total: current.installment!.total,
-      purchaseTotal: round2(list.reduce((s, t) => s + t.amount, 0)),
-      paidCount: list.filter((t) => t.date <= today).length,
+      purchaseTotal: round2(list.reduce((s, t) => s + t.amount, 0) + before * list[0].amount),
+      paidCount: before + list.filter((t) => t.date <= today).length,
       remaining: round2(list.filter((t) => t.date > today).reduce((s, t) => s + t.amount, 0)),
       endDate: last.date,
     })

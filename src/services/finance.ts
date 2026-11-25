@@ -8,7 +8,7 @@
  * Contrato completo (rotas, payloads, erros): docs/integracao-backend.md
  */
 import { toISO, uid } from '../lib/format'
-import { adjustInvoice, buildInstallments, processDueLocal, type InstallmentInput } from '../lib/ledger'
+import { adjustInvoice, buildInstallments, buildOngoingInstallments, processDueLocal, round2, type InstallmentInput, type OngoingInstallmentInput } from '../lib/ledger'
 import { TODAY } from '../data/mock'
 import type { Account, AppState, Budget, CapAlert, Card, CategoryId, CategoryRule, CustomCategory, Goal, GoalDeposit, InvoiceImport, Recurrence, Transaction, User } from '../types'
 import { mockDelay, request, USE_MOCK, USE_SUPABASE } from './http'
@@ -30,7 +30,7 @@ import { normalizeLabel } from '../data/categories'
 /* ------------------------------------------------------------------ DTOs */
 
 export type TransactionInput = Omit<Transaction, 'id'>
-export type CardInput = Pick<Card, 'nickname' | 'last4' | 'limit' | 'invoice' | 'dueDay'> & { color?: Card['color'] }
+export type CardInput = Pick<Card, 'nickname' | 'last4' | 'limit' | 'openingInvoice' | 'dueDay'> & { color?: Card['color'] }
 export type GoalInput = Omit<Goal, 'id' | 'startedAt' | 'initialSaved' | 'deposited'> & { featured?: boolean }
 
 export interface ImportInvoiceInput {
@@ -53,7 +53,7 @@ export type AccountSnapshot = Omit<AppState, 'user' | 'stage' | 'hideBalance'>
 
 export type AccountInput = Omit<Account, 'id'>
 export type RecurrenceInput = Omit<Recurrence, 'id' | 'lastRun'>
-export type { InstallmentInput }
+export type { InstallmentInput, OngoingInstallmentInput }
 
 const snapshotOf = ({ user: _u, stage: _s, hideBalance: _h, ...rest }: AppState): AccountSnapshot => rest
 const today = () => toISO(TODAY)
@@ -144,7 +144,7 @@ const invoicesRest = {
 const cardsRest = {
   /** POST /api/cards */
   create: (input: CardInput): Promise<Card> =>
-    USE_MOCK ? mock({ color: 'gradient', ...input, id: uid() } as Card) : request('POST', '/api/cards', input),
+    USE_MOCK ? mock({ color: 'gradient', ...input, invoice: input.openingInvoice, startedOn: today(), id: uid() } as Card) : request('POST', '/api/cards', input),
 
   /** PUT /api/cards/:id */
   update: (card: Card): Promise<Card> => (USE_MOCK ? mock(card) : request('PUT', `/api/cards/${card.id}`, card)),
@@ -253,6 +253,27 @@ const installmentsRest = {
     cards = fresh.reduce((c, x) => adjustInvoice(c, x, 1, t), cards)
     const transactions = [...fresh, ...current.transactions.filter((x) => !old.includes(x))].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0))
     return mock(snapshotOf({ ...current, cards, transactions }))
+  },
+  /** POST /api/installments/ongoing — compra parcelada que começou antes do Okiva (da parcela atual em diante). */
+  saveOngoing: (input: OngoingInstallmentInput, current: AppState): Promise<AccountSnapshot> => {
+    if (!USE_MOCK) return request('POST', '/api/installments/ongoing', input)
+    const t = today()
+    const fresh = buildOngoingInstallments(input, current.cards.find((c) => c.id === input.cardId), t)
+    // Importação: o total lido já virou a fatura; parcelas com invoiceId não somam ao entrar (igual ao banco)
+    const cards = fresh.filter((x) => !x.invoiceId).reduce((c, x) => adjustInvoice(c, x, 1, t), current.cards)
+    const transactions = [...fresh, ...current.transactions].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0))
+    return mock(snapshotOf({ ...current, cards, transactions }))
+  },
+  /** PATCH /api/installments/:group — muda nome, categoria e valor da parcela em todas as parcelas (compra em andamento). */
+  updateGroup: (group: string, patch: { name: string; category: CategoryId | null; amount: number }, current: AppState): Promise<AccountSnapshot> => {
+    if (!USE_MOCK) return request('PATCH', `/api/installments/${group}`, patch)
+    const t = today()
+    const old = current.transactions.filter((x) => x.installment?.group === group)
+    const fresh = old.map((x) => ({ ...x, name: patch.name, category: patch.category, amount: round2(patch.amount) }))
+    let cards = old.reduce((c, x) => adjustInvoice(c, x, -1, t), current.cards)
+    cards = fresh.reduce((c, x) => adjustInvoice(c, x, 1, t), cards)
+    const byId = new Map(fresh.map((x) => [x.id, x]))
+    return mock(snapshotOf({ ...current, cards, transactions: current.transactions.map((x) => byId.get(x.id) ?? x) }))
   },
   /** DELETE /api/installments/:group — apaga todas as parcelas da compra. */
   remove: (group: string): Promise<void> => (USE_MOCK ? mock(undefined) : request('DELETE', `/api/installments/${group}`)),

@@ -12,6 +12,8 @@ import { searchTransactions } from '../lib/search'
 import { brl, brlShort, longDate, monthKey, monthName, privateExpense, privateIncome, privateMoney } from '../lib/format'
 import {
   ACCOUNT_KINDS,
+  addMonths,
+  currentAlreadyInInvoice,
   INCOME_SOURCES,
   incomeLabel,
   installmentGroup,
@@ -1159,6 +1161,236 @@ export function ReportDetailSheet({
           </button>
         )}
       </div>
+    </Sheet>
+  )
+}
+
+/* ------------------------------------------- compra parcelada em andamento */
+
+const monthYearOf = (iso: string) => `${monthName(Number(iso.slice(5, 7)) - 1)} de ${iso.slice(0, 4)}`
+
+/** Editar um lançamento: compra parcelada que começou antes do Okiva tem formulário próprio. */
+export function EditEntrySheet({ close, id }: { close: () => void; id: string }) {
+  const { state } = useStore()
+  const t = state.transactions.find((x) => x.id === id)
+  const ongoing = !!t?.installment && (installmentGroup(state, t.installment.group)[0]?.installment?.number ?? 1) > 1
+  return ongoing ? <OngoingInstallmentSheet close={close} id={id} /> : <EntrySheet close={close} id={id} />
+}
+
+/**
+ * "Compra parcelada em andamento": a pessoa copia o que está na fatura ("GELADEIRA PARC 04/10").
+ * Parcelas anteriores à atual não são criadas (já foram pagas). A atual não soma de novo se já está
+ * no valor da fatura informado ao cadastrar o cartão. As seguintes entram uma por mês.
+ * Editar (id): nome, categoria e valor da parcela; a posição (4 de 10) e o cartão ficam.
+ */
+export function OngoingInstallmentSheet({ close, id, cardId: initialCard }: { close: () => void; id?: string; cardId?: string }) {
+  const { state, dispatch } = useStore()
+  const { openSheet } = useUI()
+  const { run, pending } = useMutation()
+  const hidden = state.hideBalance
+  const today = todayISO()
+  const existing = useLast(id ? state.transactions.find((t) => t.id === id) : undefined)
+  const group = existing?.installment ? installmentGroup(state, existing.installment.group) : []
+  const [name, setName] = useState(existing?.name ?? '')
+  const [category, setCategory] = useState<CategoryId | null>(existing ? existing.category : null)
+  const [pickedCategory, setPickedCategory] = useState(!!existing)
+  const [amount, setAmount] = useState(existing?.amount ?? 0)
+  const [cardId, setCardId] = useState(
+    existing?.method.type === 'card' ? existing.method.cardId : (initialCard ?? state.cardOrder[state.cardOrder.length - 1] ?? state.cards[0]?.id ?? ''),
+  )
+  const [currentText, setCurrentText] = useState(existing?.installment ? String(existing.installment.number) : '')
+  const [totalText, setTotalText] = useState(existing?.installment ? String(existing.installment.total) : '')
+  const [tries, setTries] = useState(0)
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const current = Number(currentText)
+  const total = Number(totalText)
+  const card = state.cards.find((c) => c.id === cardId)
+
+  const errors = {
+    name: !name.trim() ? 'Dê um nome (como aparece na fatura).' : undefined,
+    amount: amount <= 0 ? 'Informe o valor de cada parcela.' : undefined,
+    card: !card ? 'Escolha o cartão.' : undefined,
+    position: existing
+      ? undefined
+      : !(total >= 2 && total <= MAX_INSTALLMENTS)
+        ? `O total de parcelas vai de 2 a ${MAX_INSTALLMENTS}.`
+        : !(current >= 1 && current <= total)
+          ? `A parcela atual vai de 1 a ${total}.`
+          : undefined,
+  }
+  const valid = !Object.values(errors).some(Boolean)
+  const show = (e?: string) => (tries ? e : undefined)
+
+  // O que acontece com cada parcela (só ao criar)
+  const inInvoice = currentAlreadyInInvoice(card, today)
+  const ready = !existing && !errors.position && current > 0 && total > 0
+  const lastDate = ready ? addMonths(today, total - current) : ''
+  const plan: string[] = []
+  if (ready) {
+    if (current > 1) plan.push(current === 2 ? 'Parcela 1: já paga, fica de fora.' : `Parcelas 1 a ${current - 1}: já pagas, ficam de fora.`)
+    plan.push(
+      inInvoice
+        ? `Parcela ${current}: já está na fatura que você informou ao cadastrar o cartão. Não soma de novo.`
+        : `Parcela ${current}: entra na fatura deste mês.`,
+    )
+    if (current < total)
+      plan.push(
+        current + 1 === total
+          ? `Parcela ${total}: entra em ${monthYearOf(lastDate)}.`
+          : `Parcelas ${current + 1} a ${total}: uma por mês, até ${monthYearOf(lastDate)}.`,
+      )
+  }
+
+  async function save() {
+    setTries((n) => n + 1)
+    if (!valid || !card) return
+    const label = name.trim()
+    if (existing?.installment) {
+      const g = existing.installment.group
+      const ok = await run(
+        'save',
+        () => installmentsApi.updateGroup(g, { name: label, category, amount }, state),
+        (snapshot) => dispatch({ type: 'sync', snapshot }),
+        'Compra parcelada atualizada',
+      )
+      if (ok) close()
+      return
+    }
+    const ok = await run(
+      'save',
+      () => installmentsApi.saveOngoing({ name: label, category, cardId: card.id, amount, current, total }, state),
+      (snapshot) => dispatch({ type: 'sync', snapshot }),
+      current < total ? `${label}: próximas ${total - current} parcelas lançadas` : `${label} registrada`,
+    )
+    if (ok) close()
+  }
+
+  const numberInput =
+    'h-[52px] w-[64px] rounded-[18px] bg-esk-elevated text-center font-sat text-[16px] text-white outline-none ring-1 ring-esk-track placeholder:text-esk-subtle focus:ring-esk-lime'
+
+  return (
+    <Sheet title={existing ? 'Compra parcelada' : 'Compra parcelada em andamento'} onClose={existing ? () => openSheet({ type: 'tx', id: existing.id }) : close}>
+      <form
+        className="flex flex-col gap-5"
+        onSubmit={(e) => {
+          e.preventDefault()
+          save()
+        }}
+      >
+        {!existing && (
+          <p className="-mt-2 font-sat text-[13px] leading-[1.45] text-esk-muted">
+            Para compras feitas antes de usar o Okiva. Copie da fatura: <span className="text-white">“GELADEIRA PARC 04/10”</span> é a parcela 4 de 10.
+          </p>
+        )}
+        <Field label="Nome" htmlFor="ong-name" error={show(errors.name)} attempt={tries}>
+          <input
+            id="ong-name"
+            className={inputClass}
+            placeholder="Geladeira, notebook…"
+            value={name}
+            onChange={(e) => {
+              setName(e.target.value)
+              if (!pickedCategory) setCategory(ruleFor(state, e.target.value) ?? null)
+            }}
+            maxLength={40}
+            autoFocus={!existing}
+          />
+        </Field>
+        <Field label="Valor de cada parcela" htmlFor="ong-amount" error={show(errors.amount)} attempt={tries}>
+          <MoneyInput id="ong-amount" value={amount} onChange={setAmount} />
+        </Field>
+        {existing?.installment ? (
+          <p className="rounded-[18px] bg-esk-elevated px-4 py-3 font-sat text-[13px] text-esk-muted">
+            Parcela {existing.installment.number} de {existing.installment.total} · {card ? `${card.nickname} •• ${card.last4}` : 'Cartão'} · começou antes do Okiva
+          </p>
+        ) : (
+          <>
+            <Field label="Parcela deste mês" error={show(errors.position)} attempt={tries}>
+              <div className="flex items-center gap-3 font-sat text-[15px] text-esk-muted">
+                <input
+                  aria-label="Parcela atual"
+                  inputMode="numeric"
+                  placeholder="4"
+                  className={numberInput}
+                  value={currentText}
+                  onChange={(e) => setCurrentText(e.target.value.replace(/\D/g, '').slice(0, 2))}
+                />
+                de
+                <input
+                  aria-label="Total de parcelas"
+                  inputMode="numeric"
+                  placeholder="10"
+                  className={numberInput}
+                  value={totalText}
+                  onChange={(e) => setTotalText(e.target.value.replace(/\D/g, '').slice(0, 2))}
+                />
+              </div>
+            </Field>
+            {state.cards.length > 1 && (
+              <Field label="Cartão" error={show(errors.card)} attempt={tries}>
+                <div className="flex flex-wrap gap-2">
+                  {state.cards.map((c) => (
+                    <Chip key={c.id} active={cardId === c.id} onClick={() => setCardId(c.id)}>
+                      {c.nickname}
+                    </Chip>
+                  ))}
+                </div>
+              </Field>
+            )}
+          </>
+        )}
+        <Field label="Categoria">
+          <div className="flex flex-wrap gap-2">
+            {categoryIds(state).map((c) => (
+              <Chip
+                key={c}
+                active={category === c}
+                onClick={() => {
+                  setCategory(c)
+                  setPickedCategory(true)
+                }}
+              >
+                {categoryMeta(state, c).label}
+              </Chip>
+            ))}
+            <Chip
+              active={category === null}
+              dashed={category !== null}
+              onClick={() => {
+                setCategory(null)
+                setPickedCategory(true)
+              }}
+            >
+              Decidir depois
+            </Chip>
+          </div>
+        </Field>
+        {plan.length > 0 && (
+          <ul className="flex animate-rise flex-col gap-1 rounded-[18px] bg-esk-elevated px-4 py-3 font-sat text-[13px] leading-[1.45] text-esk-muted">
+            {plan.map((line) => (
+              <li key={line}>{line}</li>
+            ))}
+            {amount > 0 && <li className="pt-1 text-white">Total da compra: {privateMoney(brl(Math.round(amount * total * 100) / 100), hidden)}</li>}
+          </ul>
+        )}
+        <PrimaryButton type="submit" loading={pending === 'save'}>
+          {existing ? 'Salvar' : 'Adicionar compra parcelada'}
+        </PrimaryButton>
+        {existing?.installment && (
+          <ConfirmDelete
+            open={confirmDelete}
+            onOpen={() => setConfirmDelete(true)}
+            onCancel={() => setConfirmDelete(false)}
+            label="Apagar compra"
+            question={`Apagar a compra? As ${group.length} parcelas lançadas no Okiva saem de todos os meses.`}
+            loading={pending === 'delete'}
+            onConfirm={async () => {
+              const g = existing.installment!.group
+              if (await run('delete', () => installmentsApi.remove(g), () => dispatch({ type: 'deleteGroup', group: g }), 'Compra apagada', 'Não deu para apagar. Tente de novo.')) close()
+            }}
+          />
+        )}
+      </form>
     </Sheet>
   )
 }

@@ -101,6 +101,8 @@ export type Database = {
       }
       cards: {
         Row: {
+          opening_invoice: number
+          started_on: string
           color: Database["public"]["Enums"]["card_color"]
           created_at: string
           due_day: number
@@ -114,6 +116,8 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          opening_invoice?: number
+          started_on?: string
           color?: Database["public"]["Enums"]["card_color"]
           created_at?: string
           due_day: number
@@ -127,6 +131,8 @@ export type Database = {
           user_id?: string
         }
         Update: {
+          opening_invoice?: number
+          started_on?: string
           color?: Database["public"]["Enums"]["card_color"]
           created_at?: string
           due_day?: number
@@ -549,6 +555,7 @@ export type Database = {
       }
       transactions: {
         Row: {
+          already_in_invoice: boolean
           account_id: string | null
           amount: number
           card_id: string | null
@@ -570,6 +577,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          already_in_invoice?: boolean
           account_id?: string | null
           amount: number
           card_id?: string | null
@@ -591,6 +599,7 @@ export type Database = {
           user_id?: string
         }
         Update: {
+          already_in_invoice?: boolean
           account_id?: string | null
           amount?: number
           card_id?: string | null
@@ -704,6 +713,20 @@ export type Database = {
           p_count: number
           p_first_date: string
           p_group: string
+          p_name: string
+          p_total: number
+        }
+        Returns: string
+      }
+      save_ongoing_installments: {
+        Args: {
+          p_amount: number
+          p_card_id: string
+          p_category: string
+          p_current: number
+          p_current_in_invoice?: boolean
+          p_date?: string
+          p_invoice_id?: string
           p_name: string
           p_total: number
         }

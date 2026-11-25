@@ -22,6 +22,7 @@ import type {
   ImportInvoiceInput,
   ImportInvoiceResult,
   InstallmentInput,
+  OngoingInstallmentInput,
   RecurrenceInput,
   TransactionInput,
 } from './finance'
@@ -79,6 +80,7 @@ export const toTx = (r: Row<'transactions'>): Transaction => ({
   installment: r.installment_group ? { group: r.installment_group, number: r.installment_number ?? 1, total: r.installment_total ?? 1 } : undefined,
   recurrenceId: r.recurrence_id ?? undefined,
   posted: r.posted,
+  alreadyInInvoice: r.already_in_invoice || undefined,
 })
 
 // Parcelas e recorrência não vão no insert/update comum: parcelas passam por save_installments
@@ -131,6 +133,8 @@ export const toCard = (r: Row<'cards'>): Card => ({
   last4: r.last4,
   color: r.color,
   invoice: num(r.invoice),
+  openingInvoice: num(r.opening_invoice),
+  startedOn: r.started_on,
   limit: num(r.limit),
   dueDay: r.due_day,
 })
@@ -343,7 +347,7 @@ export const sbCardsApi = {
       await run(
         sb()
           .from('cards')
-          .insert({ nickname: input.nickname, last4: input.last4, limit: input.limit, invoice: input.invoice, due_day: input.dueDay, color: input.color ?? 'gradient' })
+          .insert({ nickname: input.nickname, last4: input.last4, limit: input.limit, opening_invoice: input.openingInvoice, due_day: input.dueDay, color: input.color ?? 'gradient' })
           .select()
           .single(),
       ),
@@ -353,7 +357,8 @@ export const sbCardsApi = {
       await run(
         sb()
           .from('cards')
-          .update({ nickname: card.nickname, last4: card.last4, limit: card.limit, invoice: card.invoice, due_day: card.dueDay, color: card.color })
+          // A fatura em si não vai: o banco a desloca pela diferença da fatura inicial
+          .update({ nickname: card.nickname, last4: card.last4, limit: card.limit, opening_invoice: card.openingInvoice, due_day: card.dueDay, color: card.color })
           .eq('id', card.id)
           .select()
           .single(),
@@ -507,6 +512,32 @@ export const sbInstallmentsApi = {
         p_count: input.count,
         p_first_date: input.firstDate,
       }),
+    )
+    return reload()
+  },
+  saveOngoing: async (input: OngoingInstallmentInput, _current?: AppState) => {
+    await run(
+      sb().rpc('save_ongoing_installments', {
+        p_name: input.name,
+        p_category: (input.category ?? '') as string,
+        p_card_id: input.cardId,
+        p_amount: input.amount,
+        p_current: input.current,
+        p_total: input.total,
+        ...(input.date ? { p_date: input.date } : {}),
+        ...(input.invoiceId ? { p_invoice_id: input.invoiceId } : {}),
+        ...(input.currentInInvoice !== undefined ? { p_current_in_invoice: input.currentInInvoice } : {}),
+      }),
+    )
+    return reload()
+  },
+  updateGroup: async (group: string, patch: { name: string; category: CategoryId | null; amount: number }, _current?: AppState) => {
+    await run(
+      sb()
+        .from('transactions')
+        .update({ name: patch.name.trim(), category: patch.category, amount: patch.amount })
+        .eq('user_id', await uid())
+        .eq('installment_group', group),
     )
     return reload()
   },

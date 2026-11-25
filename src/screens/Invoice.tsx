@@ -1,12 +1,12 @@
 import { Camera, Check } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { categoryIds, categoryMeta, hasCategory } from '../data/categories'
-import type { CategoryId } from '../types'
+import type { AppState, CategoryId } from '../types'
 import { Asset, CategoryRowIcon } from '../components/icons'
 import { ActionRow, Chip, CountUp, cx, FeatureCard, LinkButton, ListPanel, ListRow, Page, PrimaryButton, ProgressBar, RoundButton, ScreenHeader, SectionHeader } from '../components/ui'
 import { brl, brlShort, monthKey, privateMoney } from '../lib/format'
-import { readInvoice, type InvoiceResult } from '../services/ai'
-import { invoicesApi } from '../services/finance'
+import { readInvoice, withInstallments, type InvoiceResult } from '../services/ai'
+import { installmentsApi, invoicesApi, type AccountSnapshot } from '../services/finance'
 import { errorMessage } from '../services/http'
 import { currentMonth, ruleFor, todayISO, useStore } from '../state/store'
 import { useMutation } from '../state/useMutation'
@@ -45,7 +45,9 @@ export default function Invoice() {
     abort.current = ctrl
     setPhase({ name: 'reading', file, progress: 0 })
     try {
-      const result = await readInvoice(file, (progress) => setPhase({ name: 'reading', file, progress }), ctrl.signal)
+      const raw = await readInvoice(file, (progress) => setPhase({ name: 'reading', file, progress }), ctrl.signal)
+      // Compras parceladas ("PARC 04/10"): o Okiva lança as próximas parcelas sozinho
+      const result = { ...raw, items: withInstallments(raw.items) }
       setSelected(new Set(result.items.map((_, i) => i)))
       setCats({})
       setShowAll(false)
@@ -68,15 +70,19 @@ export default function Invoice() {
       .filter((_, i) => selected.has(i))
     const toSort = items.filter((it) => it.category === null).length
     const card = state.cards.find((c) => c.id === cardId) ?? null
+    // Com cartão, compra parcelada vira "em andamento": a parcela desta fatura (já no total lido)
+    // e as próximas, uma por mês. Sem cartão, entra como lançamento comum.
+    const parceladas = card ? items.filter((it) => it.installment) : []
+    const comuns = items.filter((it) => !parceladas.includes(it))
     const ok = await run(
       'confirm',
-      () =>
-        invoicesApi.import(
+      async () => {
+        const r = await invoicesApi.import(
           {
             cardId: card?.id ?? null,
             total: result.total,
             fileName: result.fileName,
-            items: items.map((it) => ({
+            items: comuns.map((it) => ({
               name: it.name,
               category: it.category,
               amount: it.amount,
@@ -87,10 +93,44 @@ export default function Invoice() {
           },
           card,
           todayISO(),
-        ),
-      (r) => dispatch({ type: 'importInvoice', txs: r.transactions, card: r.card, invoice: r.invoice }),
-      (r) =>
-        `${r.transactions.length} ${r.transactions.length === 1 ? 'lançamento adicionado' : 'lançamentos adicionados'}${toSort ? ` · ${toSort} para classificar` : ''}`,
+        )
+        if (!card || parceladas.length === 0) return { r, snapshot: null }
+        // Estado logo depois da importação (o modo local calcula em cima dele; o Supabase recarrega)
+        let working: AppState = {
+          ...state,
+          transactions: [...r.transactions, ...state.transactions],
+          cards: r.card ? state.cards.map((c) => (c.id === r.card!.id ? r.card! : c)) : state.cards,
+          invoices: [r.invoice, ...state.invoices],
+        }
+        let snapshot: AccountSnapshot | null = null
+        for (const it of parceladas) {
+          snapshot = await installmentsApi.saveOngoing(
+            {
+              name: it.name,
+              category: it.category,
+              cardId: card.id,
+              amount: it.amount,
+              current: it.installment!.number,
+              total: it.installment!.total,
+              date: it.date,
+              invoiceId: r.invoice.id,
+              currentInInvoice: true,
+            },
+            working,
+          )
+          working = { ...working, ...snapshot }
+        }
+        return { r, snapshot }
+      },
+      ({ r, snapshot }) => {
+        dispatch({ type: 'importInvoice', txs: r.transactions, card: r.card, invoice: r.invoice })
+        if (snapshot) dispatch({ type: 'sync', snapshot })
+      },
+      () => {
+        const n = comuns.length + parceladas.length
+        const extra = parceladas.reduce((s, it) => s + (it.installment!.total - it.installment!.number), 0)
+        return `${n} ${n === 1 ? 'lançamento adicionado' : 'lançamentos adicionados'}${extra ? ` · ${extra} parcelas futuras` : ''}${toSort ? ` · ${toSort} para classificar` : ''}`
+      },
       'Não deu para salvar os lançamentos. Tente de novo.',
     )
     if (ok) navigate('home')
@@ -115,6 +155,7 @@ export default function Invoice() {
   const selectedItems = found ? found.items.filter((_, i) => selected.has(i)) : []
   const selectedTotal = selectedItems.reduce((s, it) => s + it.amount, 0)
   const subs = found ? found.items.filter((i) => i.subscription).length : 0
+  const foundInstallments = found ? found.items.filter((it, i) => it.installment && selected.has(i)) : []
   // Importing twice for the same card in the same month would duplicate every purchase
   const alreadyImported =
     !!found &&
@@ -250,6 +291,19 @@ export default function Invoice() {
                   </p>
                 )}
 
+                {foundInstallments.length > 0 && (
+                  <p className="rounded-[18px] bg-esk-elevated px-4 py-3 font-sat text-[13px] leading-[1.45] text-esk-muted ring-1 ring-esk-track">
+                    Encontramos {foundInstallments.length === 1 ? '1 compra parcelada' : `${foundInstallments.length} compras parceladas`}:{' '}
+                    <span className="text-white">
+                      {foundInstallments.map((it) => `${it.name} (${it.installment!.number} de ${it.installment!.total})`).join(', ')}
+                    </span>
+                    .{' '}
+                    {cardId
+                      ? 'As próximas parcelas serão lançadas automaticamente, mês a mês.'
+                      : 'Escolha o cartão da fatura para o Okiva lançar as próximas parcelas.'}
+                  </p>
+                )}
+
                 <ul className="flex flex-col rounded-[26px] bg-esk-surface p-2">
                   {(showAll ? order : order.slice(0, 8)).map((idx) => {
                     const it = found.items[idx]
@@ -300,6 +354,12 @@ export default function Invoice() {
                           {idx in cats && <span className="font-sat text-[12px] text-esk-lime-soft">ajustado</span>}
                           {learned(idx) && <span className="font-sat text-[12px] text-esk-subtle">· como da última vez</span>}
                           {it.subscription && <span className="font-sat text-[12px] text-esk-subtle">· recorrente</span>}
+                          {it.installment && (
+                            <span className="font-sat text-[12px] text-esk-lilac">
+                              · parcela {it.installment.number} de {it.installment.total}
+                              {cardId && it.installment.number < it.installment.total ? ` · +${it.installment.total - it.installment.number} próximas` : ''}
+                            </span>
+                          )}
                         </div>
                       </li>
                     )

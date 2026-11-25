@@ -18,7 +18,7 @@ export const isPosted = (t: Pick<Transaction, 'posted' | 'date'>, today: string)
 
 /** Quanto o lançamento soma (ou tira) da fatura do cartão. */
 export function cardEffect(t: Transaction, today: string): { cardId: string; delta: number } | null {
-  if (t.method.type !== 'card' || !isPosted(t, today)) return null
+  if (t.method.type !== 'card' || !isPosted(t, today) || t.alreadyInInvoice) return null
   const k = kindOf(t)
   if (k === 'expense') return { cardId: t.method.cardId, delta: t.amount }
   if (k === 'invoice_payment') return { cardId: t.method.cardId, delta: -t.amount }
@@ -102,6 +102,53 @@ export function buildInstallments(input: InstallmentInput, today: string): Trans
       posted: date <= today,
     }
   })
+}
+
+/** Compra parcelada que começou antes do Okiva ("parcela 4 de 10"): só da atual em diante. */
+export interface OngoingInstallmentInput {
+  name: string
+  category: CategoryId | null
+  cardId: string
+  /** Valor de cada parcela (como aparece na fatura) */
+  amount: number
+  /** Parcela deste mês */
+  current: number
+  total: number
+  /** Data da parcela atual (padrão: hoje) */
+  date?: string
+  /** Veio de uma fatura importada: a atual já está no total lido */
+  invoiceId?: string
+  /** Força se a parcela atual já está na fatura (importação = true). Padrão: pela data de cadastro do cartão */
+  currentInInvoice?: boolean
+}
+
+/** A parcela atual já estava no valor da fatura informado ao cadastrar o cartão? (mês dela ≤ mês do cadastro) */
+export const currentAlreadyInInvoice = (card: Pick<Card, 'startedOn'> | undefined, date: string) =>
+  !!card?.startedOn && date.slice(0, 7) <= card.startedOn.slice(0, 7)
+
+export function buildOngoingInstallments(input: OngoingInstallmentInput, card: Card | undefined, today: string): Transaction[] {
+  const group = `g_${uid()}`
+  const first = input.date ?? today
+  const inInvoice = input.currentInInvoice ?? currentAlreadyInInvoice(card, first)
+  const out: Transaction[] = []
+  for (let n = input.current; n <= input.total; n++) {
+    const date = addMonths(first, n - input.current)
+    out.push({
+      id: uid(),
+      kind: 'expense',
+      name: input.name,
+      category: input.category,
+      method: { type: 'card', cardId: input.cardId },
+      date,
+      amount: round2(input.amount),
+      source: input.invoiceId ? 'fatura' : 'manual',
+      invoiceId: input.invoiceId,
+      installment: { group, number: n, total: input.total },
+      posted: date <= today,
+      alreadyInInvoice: n === input.current && inInvoice ? true : undefined,
+    })
+  }
+  return out
 }
 
 /** Todas as parcelas da compra, em ordem. */

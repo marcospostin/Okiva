@@ -26,6 +26,35 @@ export interface InvoiceItem {
   amount: number
   date: string
   subscription: boolean
+  /** Compra parcelada ("GELADEIRA PARC 04/10"): parcela desta fatura e total */
+  installment?: { number: number; total: number }
+}
+
+/**
+ * Reconhece compra parcelada no nome da linha da fatura: "PARC 04/10", "PARCELA 4/10", "4 DE 10"
+ * ou "04/10" no fim do nome. Devolve o nome limpo ("Geladeira") e a parcela.
+ */
+export function detectInstallment(name: string): { name: string; installment: { number: number; total: number } } | null {
+  const m =
+    name.match(/\s*[-–]?\s*PARC(?:ELA)?\.?\s*(\d{1,2})\s*(?:\/|DE)\s*(\d{1,2})\b/i) ??
+    name.match(/\s+(\d{1,2})\s+DE\s+(\d{1,2})\s*$/i) ??
+    name.match(/\s+(\d{2})\/(\d{2})\s*$/)
+  if (!m) return null
+  const number = Number(m[1])
+  const total = Number(m[2])
+  if (!(total >= 2 && total <= 48 && number >= 1 && number <= total)) return null
+  const clean = (name.slice(0, m.index) + name.slice((m.index ?? 0) + m[0].length)).replace(/[\s*–-]+$/, '').trim()
+  const pretty = clean === clean.toUpperCase() ? clean.charAt(0) + clean.slice(1).toLowerCase() : clean
+  return { name: pretty || name, installment: { number, total } }
+}
+
+/** Itens com a parcela reconhecida (o servidor pode já mandar `installment`; senão, lê do nome). */
+export function withInstallments(items: InvoiceItem[]): InvoiceItem[] {
+  return items.map((it) => {
+    if (it.installment) return it
+    const found = detectInstallment(it.name)
+    return found ? { ...it, name: found.name, installment: found.installment } : it
+  })
 }
 
 export interface InvoiceResult {
@@ -114,9 +143,9 @@ const SAMPLE: [string, CategoryId | null, number, boolean][] = [
   ['Drogaria', 'saude', 28.4, false], ['Loja de roupas', 'outros', 0, false], ['PAG*JOSEDASILVA', null, 35, false],
   ['PIX QRS 4471-AB', null, 12.5, false], ['12.345.678/0001-90', null, 26, false], ['Pet shop', 'outros', 38.9, false],
   ['Barbearia', 'outros', 45, false], ['Delivery farmácia', 'saude', 15.9, false], ['Sorveteria', 'alimentacao', 16, false],
-  ['EC *MP*LOJA3421', null, 20, false],
+  ['EC *MP*LOJA3421', null, 20, false], ['GELADEIRA PARC 04/10', 'outros', 300, false], ['Tênis Esportivo 02/03', 'lazer', 159.9, false],
 ]
-const INVOICE_TOTAL = 1284
+const INVOICE_TOTAL = 1743.9
 
 function buildItems(): InvoiceItem[] {
   const known = SAMPLE.reduce((s, [, , a]) => s + a, 0)

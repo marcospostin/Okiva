@@ -58,6 +58,8 @@ export interface Transaction {
   recurrenceId?: string
   /** false = parcela futura, ainda fora da fatura do cartão */
   posted?: boolean
+  /** Parcela que já estava no valor da fatura informado (cadastro do cartão) ou lido (importação): não soma de novo */
+  alreadyInInvoice?: boolean
   source: 'manual' | 'fatura'
   /** Imported invoice this expense came from (source 'fatura') */
   invoiceId?: string
@@ -93,8 +95,12 @@ export interface Card {
   nickname: string
   last4: string
   color: CardColor
-  /** Current invoice, typed by hand in stage 1 */
+  /** Fatura agora = fatura inicial + gastos lançados − pagamentos (mantida pelo app/banco, não se digita) */
   invoice: number
+  /** "Fatura quando você começou": o que já estava na fatura no dia do cadastro do cartão */
+  openingInvoice: number
+  /** yyyy-mm-dd em que o cartão entrou no Okiva (parcelas até esse mês já estavam na fatura inicial) */
+  startedOn?: string
   limit: number
   /** Day of month the invoice is due */
   dueDay: number

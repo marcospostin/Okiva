@@ -3,7 +3,7 @@ import { Asset } from '../components/icons'
 import { EmptyState, LinkButton, ListPanel, ListRow, Page, PrimaryButton, ProgressBar, RoundButton, ScreenHeader, SectionHeader } from '../components/ui'
 import { brlShort, longDate, pct, privateMoney } from '../lib/format'
 import { cardsApi } from '../services/finance'
-import { daysUntilDue, useStore } from '../state/store'
+import { daysUntilDue, todayISO, useStore } from '../state/store'
 import { useUI } from '../state/ui'
 import type { Card } from '../types'
 
@@ -24,7 +24,14 @@ export default function Cards() {
   const hidden = state.hideBalance
   const ordered = state.cardOrder.map((id) => state.cards.find((c) => c.id === id)).filter(Boolean) as Card[]
   const front = ordered[ordered.length - 1]
-  const used = front ? pct(front.invoice, front.limit) : 0
+  // Limite usado = fatura + parcelas futuras do cartão (igual ao banco: a compra parcelada ocupa o limite todo)
+  const future = front
+    ? state.transactions
+        .filter((t) => t.method.type === 'card' && t.method.cardId === front.id && (t.kind ?? 'expense') === 'expense' && t.date > todayISO())
+        .reduce((sum, t) => sum + t.amount, 0)
+    : 0
+  const committed = front ? front.invoice + future : 0
+  const used = front ? pct(committed, front.limit) : 0
   const upcoming = [...state.cards].sort((a, b) => daysUntilDue(a) - daysUntilDue(b))
 
   const addCard = (
@@ -104,7 +111,8 @@ export default function Cards() {
                 </div>
                 <ProgressBar value={used} className="mt-[10px]" />
                 <p className="pt-3 font-sat text-[13px] text-esk-subtle">
-                  {privateMoney(brlShort(front.invoice), hidden)} de {privateMoney(brlShort(front.limit), hidden)}
+                  {privateMoney(brlShort(committed), hidden)} de {privateMoney(brlShort(front.limit), hidden)}
+                  {future > 0 && ` · inclui ${privateMoney(brlShort(Math.round(future)), hidden)} de parcelas futuras`}
                   {ordered.length > 1 && ' · toque na pilha para trocar'}
                 </p>
                 <div className="flex flex-col gap-3 pt-4">
@@ -112,8 +120,9 @@ export default function Cards() {
                     {front.invoice > 0 ? `Pagar fatura ${front.nickname}` : 'Fatura paga'}
                   </PrimaryButton>
                   <p className="font-sat text-[12px] text-esk-subtle">Os gastos no cartão saem do saldo quando você paga a fatura.</p>
-                  <div>
+                  <div className="flex flex-wrap gap-x-5 gap-y-2">
                     <LinkButton onClick={() => openSheet({ type: 'card', id: front.id })}>Editar {front.nickname}</LinkButton>
+                    <LinkButton onClick={() => openSheet({ type: 'ongoing', cardId: front.id })}>Compra parcelada de antes do Okiva</LinkButton>
                   </div>
                 </div>
               </div>

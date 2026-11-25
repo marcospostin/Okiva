@@ -66,9 +66,9 @@ export const initialState: AppState = {
   ],
   recurrences: [],
   cards: [
-    { id: 'principal', nickname: 'Principal', last4: '4552', color: 'gradient', invoice: 1284, limit: 3000, dueDay: 18 },
-    { id: 'salario', nickname: 'Salário', last4: '6917', color: 'lilac', invoice: 640, limit: 2000, dueDay: 22 },
-    { id: 'viagem', nickname: 'Viagem', last4: '1180', color: 'offwhite', invoice: 98, limit: 5000, dueDay: 7 },
+    { id: 'principal', nickname: 'Principal', last4: '4552', color: 'gradient', invoice: 1284, openingInvoice: 1284, startedOn: toISO(TODAY), limit: 3000, dueDay: 18 },
+    { id: 'salario', nickname: 'Salário', last4: '6917', color: 'lilac', invoice: 640, openingInvoice: 640, startedOn: toISO(TODAY), limit: 2000, dueDay: 22 },
+    { id: 'viagem', nickname: 'Viagem', last4: '1180', color: 'offwhite', invoice: 98, openingInvoice: 98, startedOn: toISO(TODAY), limit: 5000, dueDay: 7 },
   ],
   cardOrder: ['viagem', 'salario', 'principal'],
   goals: [
