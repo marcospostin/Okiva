@@ -1,7 +1,8 @@
-import { lazy, Suspense, useEffect, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useState } from 'react'
 import { isRecoverySession, markRecoveryPending, onPasswordRecovery, onSignedOut, restoreSupabaseSession } from './services/auth'
 import { USE_SUPABASE } from './services/http'
 import DemoBanner from './components/DemoBanner'
+import { Splash } from './components/Splash'
 import TabBar from './components/TabBar'
 import { cx, ScreenSkeleton, ToastView } from './components/ui'
 import Home from './screens/Home'
@@ -36,7 +37,7 @@ const LINK_ERROR = typeof window !== 'undefined' && /error_code=|error=access_de
 /** Voltou pelo link do código de confirmação (Começar do zero / Excluir conta). */
 const CONFIRM_ACTION = typeof window !== 'undefined' ? (new URLSearchParams(window.location.search).get('confirmar') as 'reset' | 'delete' | null) : null
 
-function Screen() {
+function Screen({ onReady }: { onReady: () => void }) {
   const { state, dispatch } = useStore()
   const { view, navigate, sheet, direction, notify, openSheet } = useUI()
   const plusOnly = view === 'invoice' || view === 'assistant'
@@ -97,6 +98,10 @@ function Screen() {
     return () => window.clearTimeout(id)
   }, [signedIn])
 
+  useEffect(() => {
+    if (!booting) onReady()
+  }, [booting, onReady])
+
   if (booting) return <ScreenSkeleton />
 
   // Link de recuperação: só cria a senha nova; a conta não abre por essa sessão
@@ -154,10 +159,14 @@ function Screen() {
 }
 
 export default function App() {
+  // Splash do celular fica fora das telas: não reinicia quando o app troca de carregando para login/Home
+  const [ready, setReady] = useState(false)
+  const markReady = useCallback(() => setReady(true), [])
   return (
     <StoreProvider>
       <UIProvider>
-        <Screen />
+        <Screen onReady={markReady} />
+        <Splash ready={ready} />
       </UIProvider>
     </StoreProvider>
   )
