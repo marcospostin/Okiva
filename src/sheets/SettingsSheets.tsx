@@ -269,10 +269,24 @@ export function ChangeEmailSheet() {
     return (
       <Sheet title="Confirme no e-mail" onClose={back}>
         <div className="flex flex-col gap-5">
-          <p className="font-sat text-[15px] leading-[1.5] text-esk-muted">
-            Enviamos um link de confirmação para <span className="text-white">{email.trim()}</span>
-            {USE_SUPABASE ? ` e um aviso para ${maskEmail(current)}` : ''}. A troca só vale depois que você confirmar. Até lá, continue entrando com o e-mail atual.
-          </p>
+          {USE_SUPABASE ? (
+            <>
+              <p className="font-sat text-[15px] leading-[1.5] text-esk-muted">
+                Enviamos um link de confirmação para <span className="text-white">os dois e-mails</span>:
+              </p>
+              <ul className="flex flex-col gap-2 font-sat text-[15px] text-white">
+                <li className="rounded-[16px] bg-esk-control px-4 py-3"><span className="text-esk-muted">Atual · </span>{maskEmail(current)}</li>
+                <li className="rounded-[16px] bg-esk-control px-4 py-3"><span className="text-esk-muted">Novo · </span>{email.trim()}</li>
+              </ul>
+              <p className="font-sat text-[15px] leading-[1.5] text-esk-muted">
+                Abra o link nos dois. A troca só acontece depois das duas confirmações. Até lá, continue entrando com o e-mail atual.
+              </p>
+            </>
+          ) : (
+            <p className="font-sat text-[15px] leading-[1.5] text-esk-muted">
+              Enviamos um link de confirmação para <span className="text-white">{email.trim()}</span>. A troca só vale depois que você confirmar.
+            </p>
+          )}
           <PrimaryButton onClick={back}>Entendi</PrimaryButton>
         </div>
       </Sheet>
@@ -282,7 +296,10 @@ export function ChangeEmailSheet() {
   return (
     <Sheet title="Trocar e-mail" onClose={back}>
       <form className="flex flex-col gap-5" onSubmit={(e) => { e.preventDefault(); save() }}>
-        <p className="-mt-2 font-sat text-[13px] text-esk-muted">Atual: {current}</p>
+        <p className="-mt-2 font-sat text-[13px] leading-[1.5] text-esk-muted">
+          Atual: {current}
+          {USE_SUPABASE ? <><br />Por segurança, vamos pedir confirmação no e-mail atual e no novo.</> : null}
+        </p>
         <Field label="E-mail novo" htmlFor="new-email" error={tries ? emailError : undefined} attempt={tries}>
           <input id="new-email" type="email" autoComplete="email" className={inputClass} placeholder="voce@email.com" value={email} onChange={(e) => setEmail(e.target.value)} autoFocus />
         </Field>

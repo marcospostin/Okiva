@@ -23,7 +23,12 @@ const Assistant = lazy(loadAssistant)
 const SheetHost = lazy(loadSheets)
 
 /** Chegou pelo link do e-mail de confirmação (lido antes de o Supabase limpar a URL). */
-const FROM_CONFIRMATION_LINK = typeof window !== 'undefined' && /type=(signup|email)|[?&]code=/.test(window.location.hash + window.location.search)
+const FROM_CONFIRMATION_LINK = typeof window !== 'undefined' && /type=(signup|email)(?![_a-z])|[?&]code=/.test(window.location.hash + window.location.search)
+/** Troca de e-mail: o 2º link (de dois) foi confirmado e a troca valeu. */
+const EMAIL_CHANGED = typeof window !== 'undefined' && /type=email_change/.test(window.location.hash)
+/** Troca de e-mail: o 1º link foi aceito; falta o do outro e-mail ("Secure email change" do Supabase). */
+const EMAIL_CHANGE_HALF = typeof window !== 'undefined' && /message=Confirmation(\+|%20| )link(\+|%20| )accepted/i.test(window.location.hash)
+const EMAIL_CHANGE_HALF_TEXT = 'Primeira confirmação feita. Agora abra o link que enviamos para o outro e-mail para concluir a troca.'
 /** Voltou pelo link "Esqueci minha senha": só a tela de senha nova, sem abrir a conta. */
 const FROM_RECOVERY_LINK = typeof window !== 'undefined' && /type=recovery/.test(window.location.hash + window.location.search)
 /** Link do e-mail vencido ou já usado (o Supabase devolve o erro na URL). */
@@ -58,8 +63,10 @@ function Screen() {
         if (CONFIRM_ACTION === 'reset' || CONFIRM_ACTION === 'delete') {
           navigate('settings')
           openSheet({ type: 'verifyAction', action: CONFIRM_ACTION, confirmed: true })
-        } else if (FROM_CONFIRMATION_LINK) notify('E-mail confirmado. Bem-vindo ao Okiva!')
-        if (CONFIRM_ACTION) window.history.replaceState(window.history.state, '', window.location.pathname)
+        } else if (EMAIL_CHANGED) notify('E-mail trocado. A partir de agora, entre com o e-mail novo.')
+        else if (EMAIL_CHANGE_HALF) notify(EMAIL_CHANGE_HALF_TEXT)
+        else if (FROM_CONFIRMATION_LINK) notify('E-mail confirmado. Bem-vindo ao Okiva!')
+        if (CONFIRM_ACTION || EMAIL_CHANGE_HALF) window.history.replaceState(window.history.state, '', window.location.pathname)
       })
       .finally(() => alive && setBooting(false))
     const stop = onSignedOut(() => dispatch({ type: 'logout' }))
@@ -104,7 +111,15 @@ function Screen() {
   if (!signedIn)
     return (
       <>
-        <Login notice={LINK_ERROR ? 'Esse link expirou ou já foi usado. Peça um novo em "Esqueci minha senha".' : undefined} />
+        <Login
+          notice={
+            LINK_ERROR
+              ? 'Esse link expirou ou já foi usado. Peça um novo em "Esqueci minha senha".'
+              : EMAIL_CHANGE_HALF
+                ? EMAIL_CHANGE_HALF_TEXT
+                : undefined
+          }
+        />
         <ToastView />
       </>
     )
