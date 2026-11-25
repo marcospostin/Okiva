@@ -444,8 +444,9 @@ export default function Home() {
 
           {/* Right: this month + transactions */}
           {/* min-w-0: grid items grow to fit their content by default; the carousel must scroll instead */}
-          <div className="grid min-w-0 gap-8 md:gap-10 3xl:grid-cols-2 3xl:gap-12">
-            <section aria-label="Gastos do mês" className="flex min-w-0 flex-col gap-4">
+          {/* Tela larga: gastos à esquerda; relatórios e, logo abaixo, transações à direita */}
+          <div className="grid min-w-0 gap-8 md:gap-10 3xl:grid-cols-2 3xl:grid-rows-[auto_1fr] 3xl:items-start 3xl:gap-x-12 3xl:gap-y-10">
+            <section aria-label="Gastos do mês" className="flex min-w-0 flex-col gap-4 3xl:row-span-2">
               <div className="flex items-center justify-between">
                 <p className="font-inter-m text-[11px] leading-[1.3] font-medium tracking-[1.1px] text-esk-muted">
                   {isCurrent ? 'ESTE MÊS' : isFuture ? 'PREVISTO · PARCELAS' : 'MÊS'}
@@ -615,7 +616,7 @@ export default function Home() {
             </section>
 
             {/* Relatórios: prévia do mês + atalhos para a tela completa */}
-            <section aria-label="Relatórios" className="flex flex-col gap-[14px]">
+            <section aria-label="Relatórios" className="flex min-w-0 flex-col gap-[14px] 3xl:col-start-2 3xl:row-start-1">
               <div className="flex items-center justify-between leading-[1.4] whitespace-nowrap text-esk-muted">
                 <p className="font-inter-m text-[11px] font-medium tracking-[1.1px]">RELATÓRIOS</p>
                 <p className="font-inter text-[10px]">{monthLabel(month)}</p>
@@ -671,7 +672,7 @@ export default function Home() {
               </div>
             </section>
 
-            <section aria-label="Transações" className="flex flex-col gap-[14px]">
+            <section aria-label="Transações" className="flex min-w-0 flex-col gap-[14px] 3xl:col-start-2 3xl:row-start-2">
               <div className="flex items-center justify-between leading-[1.4] whitespace-nowrap text-esk-muted">
                 <p className="font-inter-m text-[11px] font-medium tracking-[1.1px]">TRANSAÇÕES</p>
                 <p className="font-inter text-[10px]">{summary.income > 0 ? `${privateIncome(summary.income, hidden)} de receitas` : 'Registradas por você'}</p>
