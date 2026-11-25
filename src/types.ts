@@ -119,7 +119,7 @@ export interface Goal {
   saved: number
   /** yyyy-mm, optional */
   deadline?: string
-  icon: 'plane' | 'shield' | 'book' | 'car' | 'target'
+  icon: 'plane' | 'shield' | 'book' | 'car' | 'target' | 'home'
   /** yyyy-mm when the person started saving; used to compute the monthly average */
   startedAt?: string
   /** Amount the person already had when the goal was created (not part of the monthly average) */

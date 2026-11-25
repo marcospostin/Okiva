@@ -232,7 +232,7 @@ function CardSheet({ close, id }: { close: () => void; id?: string }) {
 
 /* ------------------------------------------------------ Nova / editar meta */
 
-const GOAL_ICONS: Goal['icon'][] = ['plane', 'shield', 'book', 'car', 'target']
+const GOAL_ICONS: Goal['icon'][] = ['plane', 'shield', 'book', 'car', 'target', 'home']
 
 function GoalSheet({ close, id }: { close: () => void; id?: string }) {
   const { state, dispatch } = useStore()

@@ -60,7 +60,7 @@ export const Tile: Story = {
   ),
 }
 
-const goals: Goal['icon'][] = ['plane', 'shield', 'book', 'car', 'target']
+const goals: Goal['icon'][] = ['plane', 'shield', 'book', 'car', 'target', 'home']
 export const Metas: Story = {
   name: 'GoalIcon',
   render: () => (

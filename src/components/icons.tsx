@@ -3,6 +3,7 @@ import {
   Car,
   CircleHelp,
   HeartPulse,
+  House,
   Plane,
   ReceiptText,
   Shield,
@@ -88,6 +89,6 @@ export function GoalIcon({ icon }: { icon: Goal['icon'] }) {
   if (icon === 'shield') return <Asset name="130b2.svg" size={20} />
   if (icon === 'book') return <Asset name="3eb6a.svg" size={20} />
   if (icon === 'car') return <Asset name="a6782.svg" size={20} />
-  const Icon = icon === 'plane' ? Plane : icon === 'target' ? Target : icon === 'book' ? BookOpen : icon === 'car' ? Car : Shield
+  const Icon = icon === 'plane' ? Plane : icon === 'target' ? Target : icon === 'home' ? House : Shield
   return <Icon size={19} strokeWidth={1.5} className="text-white" aria-hidden />
 }

@@ -757,7 +757,7 @@ export type Database = {
     Enums: {
       account_kind: "checking" | "savings" | "wallet"
       card_color: "gradient" | "lilac" | "offwhite"
-      goal_icon: "plane" | "shield" | "book" | "car" | "target"
+      goal_icon: "plane" | "shield" | "book" | "car" | "target" | "home"
       payment_method: "card" | "pix" | "cash"
       tx_kind: "expense" | "income" | "invoice_payment" | "transfer" | "adjustment"
       tx_source: "manual" | "fatura"
@@ -890,7 +890,7 @@ export const Constants = {
     Enums: {
       account_kind: ["checking", "savings", "wallet"],
       card_color: ["gradient", "lilac", "offwhite"],
-      goal_icon: ["plane", "shield", "book", "car", "target"],
+      goal_icon: ["plane", "shield", "book", "car", "target", "home"],
       payment_method: ["card", "pix", "cash"],
       tx_kind: ["expense", "income", "invoice_payment", "transfer", "adjustment"],
       tx_source: ["manual", "fatura"],
