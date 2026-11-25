@@ -35,19 +35,21 @@
   --breakpoint-xl: 90rem; /* 1440px */
   --breakpoint-3xl: 120rem; /* 1920px - Full HD (4K scales from here) */
 
-  --color-esk-bg: #030303;
-  --color-esk-bg-2: #0a0a0c;
-  --color-esk-surface: #151518;
-  --color-esk-elevated: #18181b;
-  --color-esk-tile: #1c1c1c;
-  --color-esk-control: #1a1a1d;
-  --color-esk-row: #242428;
-  --color-esk-border: #1c1c1f;
-  --color-esk-track: #26262a;
+  --color-esk-bg: #050506;
+  --color-esk-bg-2: #09090b;
+  --color-esk-surface: #141417;
+  --color-esk-elevated: #24242a;
+  --color-esk-tile: #1f1f24;
+  --color-esk-control: #1e1e23;
+  --color-esk-row: #2c2c33;
+  --color-esk-border: #26262c;
+  --color-esk-track: #34343c;
+  /* Fundo ao passar o mouse em botões/linhas sobre cartões (um degrau acima de elevated) */
+  --color-esk-hover: #2e2e35;
   --color-esk-text: #ffffff;
   --color-esk-text-2: #f2f2f2;
-  --color-esk-muted: #9a9a9a;
-  --color-esk-subtle: #85858a;
+  --color-esk-muted: #a6a6ae;
+  --color-esk-subtle: #8b8b94;
   --color-esk-lime: #e5ffb5;
   --color-esk-lime-soft: #eafebd;
   --color-esk-lilac: #d8ccfa;
@@ -275,6 +277,39 @@
       transform: none;
     }
   }
+}
+
+/*
+ * Temas para testar sem mudar o site: abra com ?tema=classico ou ?tema=lilas (?tema=padrao volta).
+ * A escolha fica só neste navegador (src/lib/theme.ts). O padrão é a paleta A (neutra, degraus claros).
+ */
+:root[data-theme='classico'] {
+  --color-esk-bg: #030303;
+  --color-esk-bg-2: #0a0a0c;
+  --color-esk-surface: #151518;
+  --color-esk-elevated: #18181b;
+  --color-esk-tile: #1c1c1c;
+  --color-esk-control: #1a1a1d;
+  --color-esk-row: #242428;
+  --color-esk-border: #1c1c1f;
+  --color-esk-track: #26262a;
+  --color-esk-hover: #1f1f23;
+  --color-esk-muted: #9a9a9a;
+  --color-esk-subtle: #85858a;
+}
+:root[data-theme='lilas'] {
+  --color-esk-bg: #060509;
+  --color-esk-bg-2: #0a090d;
+  --color-esk-surface: #16141c;
+  --color-esk-elevated: #262330;
+  --color-esk-tile: #201d28;
+  --color-esk-control: #201e29;
+  --color-esk-row: #2e2a39;
+  --color-esk-border: #28252f;
+  --color-esk-track: #383344;
+  --color-esk-hover: #302c3b;
+  --color-esk-muted: #aaa6b8;
+  --color-esk-subtle: #8e8a9c;
 }
 
 :root {

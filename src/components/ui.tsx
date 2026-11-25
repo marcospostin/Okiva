@@ -106,7 +106,7 @@ export function RoundButton({
       aria-label={label}
       title={label}
       className={cx(
-        'grid size-[44px] shrink-0 place-items-center rounded-[22px] bg-esk-control text-white transition hover:bg-[#232327] active:scale-95',
+        'grid size-[44px] shrink-0 place-items-center rounded-[22px] bg-esk-control text-white transition hover:bg-esk-hover active:scale-95',
         className,
       )}
       {...rest}
@@ -243,7 +243,7 @@ export function ActionRow({ icon, label, onClick, disabled }: { icon: ReactNode;
       <span className="grid size-[84px] place-items-center rounded-[26px] bg-esk-lime-soft transition group-hover:brightness-95 group-active:scale-95">
         {icon}
       </span>
-      <span className="flex items-center rounded-[26px] bg-esk-elevated px-6 font-sat text-[17px] font-medium text-white transition group-hover:bg-[#1f1f23]">
+      <span className="flex items-center rounded-[26px] bg-esk-elevated px-6 font-sat text-[17px] font-medium text-white transition group-hover:bg-esk-hover">
         {label}
       </span>
     </button>
@@ -505,7 +505,7 @@ export function Chip({
           ? 'bg-esk-lime text-esk-ink shadow-[0_4px_16px_rgba(229,255,181,0.18)]'
           : dashed
             ? 'border border-dashed border-esk-subtle text-esk-lime hover:border-esk-lime'
-            : 'bg-esk-elevated text-white ring-1 ring-esk-track hover:bg-[#1f1f23]',
+            : 'bg-esk-elevated text-white ring-1 ring-esk-track hover:bg-esk-hover',
       )}
     >
       {icon}
@@ -532,8 +532,8 @@ export function PrimaryButton({
         'relative flex h-[56px] w-full items-center justify-center gap-2 rounded-[22px] font-sat text-[16px] font-medium transition duration-200 active:scale-[0.98] disabled:cursor-not-allowed',
         loading ? 'cursor-progress' : 'disabled:opacity-40',
         tone === 'lime' && 'bg-esk-lime text-esk-ink hover:brightness-95',
-        tone === 'dark' && 'bg-esk-elevated text-white ring-1 ring-esk-track hover:bg-[#1f1f23]',
-        tone === 'danger' && 'bg-esk-elevated text-esk-lilac ring-1 ring-esk-track hover:bg-[#1f1f23]',
+        tone === 'dark' && 'bg-esk-elevated text-white ring-1 ring-esk-track hover:bg-esk-hover',
+        tone === 'danger' && 'bg-esk-elevated text-esk-lilac ring-1 ring-esk-track hover:bg-esk-hover',
         className,
       )}
       {...rest}

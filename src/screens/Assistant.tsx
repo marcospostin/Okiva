@@ -187,7 +187,7 @@ export default function Assistant() {
                     type="button"
                     onClick={() => retry(m.id, m.question)}
                     disabled={waiting}
-                    className="flex items-center gap-2 rounded-full bg-esk-elevated px-4 py-2 font-sat text-[13px] font-medium text-white ring-1 ring-esk-track transition hover:bg-[#1f1f23] active:scale-95 disabled:opacity-40"
+                    className="flex items-center gap-2 rounded-full bg-esk-elevated px-4 py-2 font-sat text-[13px] font-medium text-white ring-1 ring-esk-track transition hover:bg-esk-hover active:scale-95 disabled:opacity-40"
                   >
                     <RotateCcw size={14} strokeWidth={2} />
                     Tentar de novo
@@ -234,7 +234,7 @@ export default function Assistant() {
                   type="button"
                   disabled={waiting}
                   onClick={() => send(s)}
-                  className="h-[36px] shrink-0 rounded-[18px] bg-esk-elevated px-4 font-sat text-[13px] font-medium text-white ring-1 ring-esk-track transition duration-200 hover:bg-[#1f1f23] active:scale-95 disabled:opacity-50"
+                  className="h-[36px] shrink-0 rounded-[18px] bg-esk-elevated px-4 font-sat text-[13px] font-medium text-white ring-1 ring-esk-track transition duration-200 hover:bg-esk-hover active:scale-95 disabled:opacity-50"
                 >
                   {s}
                 </button>

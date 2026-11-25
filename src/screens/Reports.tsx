@@ -109,14 +109,14 @@ export default function Reports() {
           {/* Período */}
           <div className="flex flex-col gap-3">
             <div className="flex items-center justify-between gap-3">
-              <button type="button" aria-label="Período anterior" onClick={() => setAnchor((m) => shiftMonth(m, -effectiveSpan))} className="grid size-[38px] place-items-center rounded-full bg-esk-elevated text-white transition hover:bg-[#1f1f23]">
+              <button type="button" aria-label="Período anterior" onClick={() => setAnchor((m) => shiftMonth(m, -effectiveSpan))} className="grid size-[38px] place-items-center rounded-full bg-esk-elevated text-white transition hover:bg-esk-hover">
                 <ChevronLeft size={18} />
               </button>
               <p className={cx('font-sat text-[17px] font-medium', future ? 'text-esk-muted' : 'text-white')}>
                 {periodLabel(months)}
                 {future && <span className="ml-2 rounded-[6px] bg-white/[0.06] px-[6px] py-px text-[11px] text-esk-muted">previsto</span>}
               </p>
-              <button type="button" aria-label="Próximo período" onClick={() => setAnchor((m) => shiftMonth(m, effectiveSpan))} className="grid size-[38px] place-items-center rounded-full bg-esk-elevated text-white transition hover:bg-[#1f1f23]">
+              <button type="button" aria-label="Próximo período" onClick={() => setAnchor((m) => shiftMonth(m, effectiveSpan))} className="grid size-[38px] place-items-center rounded-full bg-esk-elevated text-white transition hover:bg-esk-hover">
                 <ChevronRight size={18} />
               </button>
             </div>
@@ -272,7 +272,7 @@ function PayeeReport({
   return (
     <div className="flex flex-col gap-3">
       {filterLabel && (
-        <button type="button" onClick={onClearFilter} className="flex items-center gap-2 self-start rounded-full bg-esk-elevated px-3 py-[6px] font-sat text-[13px] text-white ring-1 ring-esk-track hover:bg-[#1f1f23]">
+        <button type="button" onClick={onClearFilter} className="flex items-center gap-2 self-start rounded-full bg-esk-elevated px-3 py-[6px] font-sat text-[13px] text-white ring-1 ring-esk-track hover:bg-esk-hover">
           Só {filterLabel} <X size={14} aria-label="Ver todas as categorias" />
         </button>
       )}

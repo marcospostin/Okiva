@@ -206,7 +206,7 @@ function AccountDetail({ account, onBack, onOpen }: { account: Account; onBack: 
             <button
               type="button"
               onClick={() => openSheet({ type: 'bankAccount', id: account.id })}
-              className="h-[44px] shrink-0 rounded-full bg-esk-elevated px-4 font-sat text-[14px] font-medium text-white ring-1 ring-esk-track transition hover:bg-[#1f1f23]"
+              className="h-[44px] shrink-0 rounded-full bg-esk-elevated px-4 font-sat text-[14px] font-medium text-white ring-1 ring-esk-track transition hover:bg-esk-hover"
             >
               Editar
             </button>

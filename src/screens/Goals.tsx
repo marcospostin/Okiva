@@ -88,7 +88,7 @@ export default function Goals() {
                   <button
                     type="button"
                     onClick={() => openSheet({ type: 'budget', category: cat })}
-                    className="flex w-full flex-col gap-3 rounded-[26px] bg-esk-elevated p-4 text-left transition hover:bg-[#1f1f23] active:scale-[0.98] md:p-5"
+                    className="flex w-full flex-col gap-3 rounded-[26px] bg-esk-elevated p-4 text-left transition hover:bg-esk-hover active:scale-[0.98] md:p-5"
                   >
                     <div className="flex items-center gap-2 pr-9">
                       <span className="size-[10px] shrink-0 rounded-full" style={{ backgroundColor: meta.color }} />
@@ -135,7 +135,7 @@ export default function Goals() {
             <button
               type="button"
               onClick={() => openSheet({ type: 'categories' })}
-              className="flex items-center justify-between gap-3 rounded-[22px] bg-esk-elevated px-5 py-4 text-left transition hover:bg-[#1f1f23]"
+              className="flex items-center justify-between gap-3 rounded-[22px] bg-esk-elevated px-5 py-4 text-left transition hover:bg-esk-hover"
             >
               <span className="flex flex-col">
                 <span className="font-sat text-[15px] font-medium text-white">Categorias</span>

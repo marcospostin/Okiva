@@ -1093,7 +1093,7 @@ export function ReconcileSheet({ close, accountId, cardId }: { close: () => void
                     type="button"
                     disabled={!!pending}
                     onClick={() => choose(o.id)}
-                    className="flex w-full items-center gap-3 rounded-[20px] bg-esk-elevated px-4 py-3 text-left ring-1 ring-esk-track transition hover:bg-[#1f1f23] disabled:opacity-50"
+                    className="flex w-full items-center gap-3 rounded-[20px] bg-esk-elevated px-4 py-3 text-left ring-1 ring-esk-track transition hover:bg-esk-hover disabled:opacity-50"
                   >
                     <span className="flex min-w-0 flex-1 flex-col gap-[2px]">
                       <span className="font-sat text-[15px] font-medium text-white">{o.title}</span>
@@ -1474,7 +1474,7 @@ export function ReportDetailSheet({
               window.dispatchEvent(new CustomEvent(REPORTS_EVENT, { detail: { tab: 'onde', category } }))
               close()
             }}
-            className="flex items-center justify-between gap-3 rounded-[18px] bg-esk-elevated px-4 py-3 text-left font-sat text-[14px] font-medium text-esk-lime-soft ring-1 ring-esk-track hover:bg-[#1f1f23]"
+            className="flex items-center justify-between gap-3 rounded-[18px] bg-esk-elevated px-4 py-3 text-left font-sat text-[14px] font-medium text-esk-lime-soft ring-1 ring-esk-track hover:bg-esk-hover"
           >
             Ver onde gastei nesta categoria
             <ChevronRight size={16} aria-hidden />

@@ -69,7 +69,7 @@ function MonthPicker({ months, value, onChange }: { months: string[]; value: str
         aria-expanded={open}
         aria-label={`Escolher mês: ${monthLabel(value)}`}
         onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-2 rounded-[16px] bg-esk-elevated py-[6px] pr-3 pl-3 font-inter-m text-[12px] leading-[1.3] font-medium transition hover:bg-[#1f1f23]"
+        className="flex items-center gap-2 rounded-[16px] bg-esk-elevated py-[6px] pr-3 pl-3 font-inter-m text-[12px] leading-[1.3] font-medium transition hover:bg-esk-hover"
       >
         <span className={future ? 'text-esk-muted' : 'text-white'}>{monthLabel(value)}</span>
         <ChevronDown size={12} className={cx('text-esk-muted transition', open && 'rotate-180')} aria-hidden />
@@ -587,7 +587,7 @@ export default function Home() {
                       type="button"
                       onClick={() => navigate('goals')}
                       aria-label={`Ver todas as categorias: mais ${restTiles.length}, ${privateMoney(brlShort(restAmount), hidden)} no mês`}
-                      className="group flex h-[142px] min-w-0 animate-rise flex-col items-start gap-2 rounded-[26px] bg-esk-tile pt-4 pr-[10px] pb-[14px] pl-[13px] text-left text-white ring-1 ring-esk-track transition duration-200 hover:-translate-y-0.5 hover:bg-[#232327] active:scale-[0.97] lg:h-[156px] lg:pl-4"
+                      className="group flex h-[142px] min-w-0 animate-rise flex-col items-start gap-2 rounded-[26px] bg-esk-tile pt-4 pr-[10px] pb-[14px] pl-[13px] text-left text-white ring-1 ring-esk-track transition duration-200 hover:-translate-y-0.5 hover:bg-esk-hover active:scale-[0.97] lg:h-[156px] lg:pl-4"
                       style={{ animationDelay: `${80 + Math.min(shownTiles.length, 5) * 60}ms` }}
                     >
                       {/* Cores das categorias escondidas */}
@@ -660,7 +660,7 @@ export default function Home() {
                       key={tab}
                       type="button"
                       onClick={() => openReports(tab)}
-                      className="h-[36px] rounded-[14px] bg-esk-elevated font-inter-m text-[12px] font-medium text-white ring-1 ring-esk-track transition hover:bg-[#1f1f23] active:scale-[0.97]"
+                      className="h-[36px] rounded-[14px] bg-esk-elevated font-inter-m text-[12px] font-medium text-white ring-1 ring-esk-track transition hover:bg-esk-hover active:scale-[0.97]"
                     >
                       {label}
                     </button>
