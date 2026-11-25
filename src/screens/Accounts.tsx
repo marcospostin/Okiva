@@ -2,7 +2,8 @@ import { useState } from 'react'
 import { ArrowDownLeft, CreditCard, Landmark, PiggyBank, Plus, Repeat, Wallet } from 'lucide-react'
 import { categoryMeta } from '../data/categories'
 import { CategoryRowIcon } from '../components/icons'
-import { cx, EmptyState, ListPanel, ListRow, Page, RoundButton, ScreenHeader, SectionHeader } from '../components/ui'
+import { cx, EmptyState, ListPanel, ListRow, Page, RoundButton, ScreenHeader, SearchField, SearchSummary, SectionHeader } from '../components/ui'
+import { searchTransactions } from '../lib/search'
 import { brl, longDate, privateExpense, privateIncome, privateMoney, shortDate } from '../lib/format'
 import { accountKindLabel, incomeLabel, kindOf, nextDate } from '../lib/ledger'
 import { accountBalance, accountTransactions, balanceOf, todayISO, useStore } from '../state/store'
@@ -30,9 +31,13 @@ export default function Accounts() {
   const today = todayISO()
   const [selected, setSelected] = useState(state.accounts[0]?.id ?? '')
   const account = state.accounts.find((a) => a.id === selected) ?? state.accounts[0]
-  const movements = account ? accountTransactions(state, account.id).filter((t) => t.date <= today) : []
+  const allMovements = account ? accountTransactions(state, account.id).filter((t) => t.date <= today) : []
+  const [query, setQuery] = useState('')
+  const searching = query.trim().length > 0
+  const movements = searchTransactions(state, allMovements, query)
   const [showAll, setShowAll] = useState(false)
-  const shown = showAll ? movements : movements.slice(0, 8)
+  const limit = searching ? 20 : 8
+  const shown = showAll ? movements : movements.slice(0, limit)
 
   const subtitle = (t: Transaction) => {
     const k = kindOf(t)
@@ -66,7 +71,10 @@ export default function Accounts() {
                 <ListRow
                   key={a.id}
                   index={i}
-                  onClick={() => setSelected(a.id)}
+                  onClick={() => {
+                    setSelected(a.id)
+                    setShowAll(false)
+                  }}
                   icon={<AccountIcon kind={a.kind} />}
                   title={
                     <span className="flex items-center gap-2">
@@ -105,8 +113,23 @@ export default function Accounts() {
                     </button>
                   }
                 />
-                {movements.length === 0 ? (
+                {allMovements.length > 0 && (
+                  <div className="flex flex-col gap-2">
+                    <SearchField
+                      value={query}
+                      onChange={(v) => {
+                        setQuery(v)
+                        setShowAll(false)
+                      }}
+                      label={`Buscar no extrato de ${account.name}`}
+                    />
+                    {searching && movements.length > 0 && <SearchSummary txs={movements} hidden={hidden} scope="nesta conta" />}
+                  </div>
+                )}
+                {allMovements.length === 0 ? (
                   <EmptyState title="Nada nesta conta ainda" text="Receitas, gastos no Pix ou em dinheiro e pagamentos de fatura aparecem aqui." />
+                ) : movements.length === 0 ? (
+                  <EmptyState title={`Nada com “${query.trim()}”`} text="Tente parte do nome, um valor (45,90 ou >100) ou uma data (12/11, novembro)." />
                 ) : (
                   <ListPanel>
                     {shown.map((t, i) => (
@@ -131,9 +154,9 @@ export default function Accounts() {
                     ))}
                   </ListPanel>
                 )}
-                {movements.length > 8 && (
+                {movements.length > limit && (
                   <button type="button" onClick={() => setShowAll((v) => !v)} className="self-start font-sat text-[14px] font-medium text-esk-lime">
-                    {showAll ? 'Mostrar menos' : `Ver mais (${movements.length - 8})`}
+                    {showAll ? 'Mostrar menos' : `Ver mais (${movements.length - limit})`}
                   </button>
                 )}
               </>

@@ -2,7 +2,8 @@ import { ArrowDownLeft, Check, ChevronDown, ChevronLeft, ChevronRight, CircleHel
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { categoryMeta, UNCATEGORIZED } from '../data/categories'
 import { Asset, CategoryRowIcon, CategoryTileIcon } from '../components/icons'
-import { Avatar, CountUp, cx, Page } from '../components/ui'
+import { Avatar, CountUp, cx, Page, SearchField, SearchSummary } from '../components/ui'
+import { searchTransactions } from '../lib/search'
 import { brl, brlShort, capitalize, privateExpense, privateIncome, privateMoney, monthName, pct, relativeDay } from '../lib/format'
 import { incomeLabel, kindOf } from '../lib/ledger'
 import { TODAY } from '../data/mock'
@@ -228,8 +229,23 @@ export default function Home() {
   const available = state.budget.total - summary.total
   const budgetUsed = pct(summary.total, state.budget.total)
   const variation = summary.previousTotal ? pct(summary.total - summary.previousTotal, summary.previousTotal) : null
-  const txs = showAll ? summary.transactions : summary.transactions.slice(0, 6)
   const todayKey = toISO(TODAY)
+  // Busca: procura em todos os meses (não só no escolhido)
+  const [query, setQuery] = useState('')
+  const searching = query.trim().length > 0
+  const results = useMemo(() => {
+    if (!searching) return []
+    const all = [...state.transactions].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0))
+    return searchTransactions(state, all, query)
+  }, [state, query, searching])
+  const listSource = searching ? results : summary.transactions
+  const listLimit = searching ? 20 : 6
+  const txs = showAll ? listSource : listSource.slice(0, listLimit)
+  const thisYear = todayKey.slice(0, 4)
+  const dayLabel = (iso: string) => {
+    const base = relativeDay(iso, TODAY)
+    return searching && iso.slice(0, 4) !== thisYear ? `${base} ${iso.slice(0, 4)}` : base
+  }
 
   // Cards do mês: todas as categorias com teto em Metas (mesmo sem gasto, ex.: Lazer)
   // + categorias com gasto e sem teto, para cada trecho da barra ter o seu card.
@@ -656,8 +672,21 @@ export default function Home() {
                 <p className="font-inter text-[10px]">{summary.income > 0 ? `${privateIncome(summary.income, hidden)} de receitas` : 'Registradas por você'}</p>
               </div>
 
+              {state.transactions.length > 0 && (
+                <div className="flex flex-col gap-2">
+                  <SearchField
+                    value={query}
+                    onChange={(v) => {
+                      setQuery(v)
+                      setShowAll(false)
+                    }}
+                  />
+                  {searching && results.length > 0 && <SearchSummary txs={results} hidden={hidden} scope="em todos os meses" />}
+                </div>
+              )}
+
               {/* Gastos sem categoria: ficam sinalizados até a pessoa classificar */}
-              {pendingCount > 0 && (
+              {pendingCount > 0 && !searching && (
                 <button
                   type="button"
                   onClick={() => openSheet({ type: 'categorize' })}
@@ -678,7 +707,12 @@ export default function Home() {
                 </button>
               )}
 
-              {summary.transactions.length === 0 ? (
+              {searching && results.length === 0 ? (
+                <div className="flex flex-col items-start gap-1 rounded-[26px] border border-dashed border-esk-track p-6">
+                  <p className="font-inter-m text-[15px] font-medium text-white">Nada com “{query.trim()}”</p>
+                  <p className="font-inter text-[12px] text-esk-muted">Tente parte do nome, a categoria, um valor (45,90 ou &gt;100) ou uma data (12/11, novembro).</p>
+                </div>
+              ) : !searching && summary.transactions.length === 0 ? (
                 <div className="flex flex-col items-start gap-3 rounded-[26px] border border-dashed border-esk-track p-6">
                   <p className="font-inter-m text-[15px] font-medium text-white">Nada em {monthName(Number(month.slice(5, 7)) - 1)}</p>
                   <p className="font-inter text-[12px] text-esk-muted">Fez uma compra ou recebeu algo? Digite o valor e o mês se mexe.</p>
@@ -732,7 +766,7 @@ export default function Home() {
                           <span className={cx('font-inter-m text-[12px] font-medium tracking-[-0.24px] md:text-[14px]', k === 'income' ? 'text-esk-positive' : 'text-esk-negative')}>
                             {k === 'income' ? privateIncome(t.amount, hidden) : privateExpense(t.amount, hidden)}
                           </span>
-                          <span className="font-inter text-[10px] text-esk-muted md:text-[11px]">{ahead ? `prevista ${relativeDay(t.date, TODAY)}` : relativeDay(t.date, TODAY)}</span>
+                          <span className="font-inter text-[10px] text-esk-muted md:text-[11px]">{ahead ? `prevista ${dayLabel(t.date)}` : dayLabel(t.date)}</span>
                         </span>
                       </button>
                     </li>
@@ -740,13 +774,13 @@ export default function Home() {
                   })}
                 </ul>
               )}
-              {summary.transactions.length > 6 && (
+              {listSource.length > listLimit && (
                 <button
                   type="button"
                   onClick={() => setShowAll((v) => !v)}
                   className="flex items-center gap-1 self-start font-inter-m text-[12px] font-medium text-esk-lime"
                 >
-                  {showAll ? 'Mostrar menos' : `Ver mais (${summary.transactions.length - 6})`}
+                  {showAll ? 'Mostrar menos' : `Ver mais (${listSource.length - listLimit})`}
                   <ChevronDown size={14} className={cx('transition', showAll && 'rotate-180')} />
                 </button>
               )}

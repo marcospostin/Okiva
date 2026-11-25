@@ -7,7 +7,8 @@ import { BellRing, ChevronRight, Minus, Plus, Repeat } from 'lucide-react'
 import { categoryIds, categoryMeta, normalizeLabel } from '../data/categories'
 import { REPORTS_EVENT } from '../lib/reports'
 import { CategoryRowIcon } from '../components/icons'
-import { Chip, cx, Field, inputClass, MoneyInput, PrimaryButton, Sheet, Switch } from '../components/ui'
+import { Chip, cx, Field, inputClass, MoneyInput, PrimaryButton, SearchField, SearchSummary, Sheet, Switch } from '../components/ui'
+import { searchTransactions } from '../lib/search'
 import { brl, brlShort, longDate, monthKey, monthName, privateExpense, privateIncome, privateMoney } from '../lib/format'
 import {
   ACCOUNT_KINDS,
@@ -1096,7 +1097,10 @@ export function ReportDetailSheet({
   const hidden = state.hideBalance
   const today = todayISO()
   const set = new Set(ids)
-  const txs = state.transactions.filter((t) => set.has(t.id)).sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0))
+  const allTxs = state.transactions.filter((t) => set.has(t.id)).sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0))
+  const [query, setQuery] = useState('')
+  const searching = query.trim().length > 0
+  const txs = searchTransactions(state, allTxs, query)
   const [all, setAll] = useState(false)
   const shown = all ? txs : txs.slice(0, 30)
 
@@ -1117,7 +1121,16 @@ export function ReportDetailSheet({
             <ChevronRight size={16} aria-hidden />
           </button>
         )}
-        <ul className="flex flex-col rounded-[22px] bg-esk-elevated px-3">
+        {allTxs.length > 5 && (
+          <div className="flex flex-col gap-2">
+            <SearchField value={query} onChange={setQuery} label={`Buscar em ${title}`} />
+            {searching && <SearchSummary txs={txs} hidden={hidden} />}
+          </div>
+        )}
+        {searching && txs.length === 0 && (
+          <p className="font-sat text-[13px] text-esk-muted">Tente parte do nome, um valor (45,90 ou &gt;100) ou uma data (12/11).</p>
+        )}
+        <ul className={cx('flex flex-col rounded-[22px] bg-esk-elevated px-3', txs.length === 0 && 'hidden')}>
           {shown.map((t, i) => {
             const k = kindOf(t)
             return (

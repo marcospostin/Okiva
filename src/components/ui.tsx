@@ -1,8 +1,10 @@
-import { AlertCircle, ArrowLeft, Check, Info, X } from 'lucide-react'
+import { AlertCircle, ArrowLeft, Check, Info, Search, X } from 'lucide-react'
 import { useEffect, useRef, useState, type ButtonHTMLAttributes, type ReactNode } from 'react'
 import { DEMO_USER } from '../data/mock'
 import { useUI } from '../state/ui'
-import type { User } from '../types'
+import { brl, HIDDEN_MONEY } from '../lib/format'
+import { kindOf } from '../lib/ledger'
+import type { Transaction, User } from '../types'
 
 export const cx = (...c: (string | false | null | undefined)[]) => c.filter(Boolean).join(' ')
 
@@ -592,5 +594,75 @@ export function ScreenSkeleton() {
         </div>
       </Page>
     </div>
+  )
+}
+
+/** Campo de busca (transações). Esc limpa; o X aparece quando há texto. */
+export function SearchField({
+  value,
+  onChange,
+  placeholder = 'Buscar por nome, valor, data…',
+  label = 'Buscar transações',
+  className,
+}: {
+  value: string
+  onChange: (v: string) => void
+  placeholder?: string
+  label?: string
+  className?: string
+}) {
+  const ref = useRef<HTMLInputElement>(null)
+  return (
+    <div role="search" className={cx('relative flex items-center', className)}>
+      <Search size={17} strokeWidth={1.8} className="pointer-events-none absolute left-4 text-esk-subtle" aria-hidden />
+      <input
+        ref={ref}
+        type="search"
+        enterKeyHint="search"
+        spellCheck={false}
+        autoCorrect="off"
+        autoCapitalize="off"
+        aria-label={label}
+        placeholder={placeholder}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Escape' && value) {
+            e.stopPropagation()
+            onChange('')
+          }
+        }}
+        className="h-[46px] w-full rounded-[18px] bg-esk-surface pr-11 pl-11 font-sat text-[15px] text-white outline-none ring-1 ring-esk-track placeholder:text-esk-subtle focus:ring-esk-lime [&::-webkit-search-cancel-button]:hidden"
+      />
+      {value && (
+        <button
+          type="button"
+          aria-label="Limpar busca"
+          onClick={() => {
+            onChange('')
+            ref.current?.focus()
+          }}
+          className="absolute right-2 grid size-[32px] place-items-center rounded-full text-esk-muted transition hover:bg-white/[0.06] hover:text-white"
+        >
+          <X size={16} strokeWidth={2} />
+        </button>
+      )}
+    </div>
+  )
+}
+
+/** Resumo do resultado da busca: "3 resultados · − R$ 120,00 em gastos · + R$ 50,00 em receitas" */
+export function SearchSummary({ txs, hidden, scope }: { txs: Transaction[]; hidden?: boolean; scope?: string }) {
+  const spent = txs.reduce((s, t) => s + (kindOf(t) === 'expense' ? t.amount : 0), 0)
+  const earned = txs.reduce((s, t) => s + (kindOf(t) === 'income' ? t.amount : 0), 0)
+  const money = (n: number) => (hidden ? HIDDEN_MONEY : brl(n))
+  const count = txs.length
+  return (
+    <p aria-live="polite" className="font-sat text-[12px] leading-[1.5] text-esk-muted">
+      {count === 0 ? 'Nada encontrado' : `${count} ${count === 1 ? 'resultado' : 'resultados'}`}
+      {scope ? ` ${scope}` : ''}
+      {spent > 0 && <> · <span className="text-esk-negative">− {money(spent)}</span> em gastos</>}
+      {earned > 0 && <> · <span className="text-esk-positive">+ {money(earned)}</span> em receitas</>}
+    </p>
   )
 }
