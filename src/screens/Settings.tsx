@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import { Bell, Bug, Camera, CircleHelp, Download, EyeOff, FileText, KeyRound, Layers, LogOut, RotateCcw, ScrollText, Sparkles, Star } from 'lucide-react'
+import { Bell, Bug, Camera, CircleHelp, Download, EyeOff, FileText, KeyRound, LogOut, RotateCcw, ScrollText, Sparkles, Star } from 'lucide-react'
 import { Avatar, Page, PrimaryButton, ScreenHeader, Spinner, Switch } from '../components/ui'
 import { OptionGroup, OptionRow } from '../sheets/SettingsSheets'
 import { readAvatar } from '../lib/image'
@@ -149,20 +149,6 @@ export default function Settings() {
                 <span className="font-sat text-[12px] text-esk-subtle">Esconde os valores ao abrir o app</span>
               </span>
               <Switch label="Ocultar saldo" checked={state.hideBalance} onChange={() => dispatch({ type: 'toggleHide' })} />
-            </div>
-            <div className="flex items-center gap-3 border-t border-esk-border py-4">
-              <span className="grid size-[34px] shrink-0 place-items-center rounded-full bg-esk-row text-esk-text-2">
-                <Layers size={17} />
-              </span>
-              <span className="flex min-w-0 flex-1 flex-col">
-                <span className="font-sat text-[15px] text-white">Destacar compras parceladas</span>
-                <span className="font-sat text-[12px] leading-[1.35] text-esk-subtle">Resumo do mês e prazos na Home</span>
-              </span>
-              <Switch
-                label="Destacar compras parceladas"
-                checked={state.highlightInstallments !== false}
-                onChange={() => dispatch({ type: 'toggleInstallments' })}
-              />
             </div>
             <OptionRow icon={<Bell size={17} />} label="Notificações" hint="Escolha os avisos que quer receber" onClick={() => openSheet({ type: 'notifications' })} />
           </Section>

@@ -24,7 +24,8 @@ Especificação de negócio: [modelo-de-dados.md](modelo-de-dados.md) · contrat
 | `supabase/migrations/20261123180000_okiva_categorias_editaveis.sql` | categorias do app viram sugestões editáveis |
 | `supabase/migrations/20261124120000_okiva_sem_categoria_regras.sql` | gasto sem categoria e regras aprendidas |
 | `supabase/migrations/20261125120000_okiva_hardening.sql` | sem admin, limites de tamanho/datas/quantidade por usuário, limite de mensagens de suporte |
-| `supabase/migrations/20261126120000_okiva_destacar_parceladas.sql` | `profiles.highlight_installments`: liga/desliga o bloco "Compras parceladas" da Home (padrão ligado) |
+| `supabase/migrations/20261126120000_okiva_destacar_parceladas.sql` | criou `profiles.highlight_installments` (interruptor do bloco "Compras parceladas"); removida na etapa 12 |
+| `supabase/migrations/20261126150000_okiva_parceladas_sempre.sql` | remove a coluna: o bloco "Compras parceladas" aparece sempre que há parcela no mês |
 | `supabase/migrations/20261124180000_okiva_conta_suporte_seguranca.sql` | preferências de notificação, mensagens de suporte e confirmação por e-mail para apagar dados |
 | `supabase/templates/*.html` | e-mails em português (cadastro, código de confirmação, redefinir senha, trocar e-mail): colar no dashboard |
 | `supabase/seed.sql` | **seed temporário** da conta demo (mocks) |

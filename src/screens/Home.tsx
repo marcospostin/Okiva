@@ -673,7 +673,7 @@ export default function Home() {
                 <p className="font-inter text-[10px]">{summary.income > 0 ? `${privateIncome(summary.income, hidden)} de receitas` : 'Registradas por você'}</p>
               </div>
 
-              {state.highlightInstallments !== false && !searching && (
+              {!searching && (
                 <InstallmentsBlock
                   state={state}
                   month={month}

@@ -53,7 +53,6 @@ export const initialState: AppState = {
   user: null,
   stage: 2,
   hideBalance: false,
-  highlightInstallments: true,
   startingBalance: 0,
   transactions: EXAMPLE_TRANSACTIONS,
   // Saldo de R$ 14.500 depois dos exemplos: gastos no cartão só saem do saldo ao pagar a fatura

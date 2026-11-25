@@ -16,7 +16,7 @@ const monthShort = (key: string, withYear: boolean) => {
  * "Compras parceladas" no topo de Transações (Home).
  * Recolhido: quanto vai para compras parceladas NO MÊS escolhido, quantas são e quando a
  * última termina. Aberto: cada compra (parcela X de Y, quanto falta) e o total mês a mês.
- * Só aparece quando há parcela no mês; Conta → Preferências desliga.
+ * Só aparece quando há parcela no mês.
  */
 export function InstallmentsBlock({
   state,
