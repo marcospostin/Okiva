@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 
 const SEEN_KEY = 'okiva:splash-seen'
 /** Tempo mínimo na tela (a marca precisa ser lida, não piscar) */
-const MIN_MS = 1600
+const MIN_MS = 2400
 const FADE_MS = 360
 
 /** Celular (o painel do login fica escondido abaixo de md) e ainda não visto nesta visita. */
@@ -29,7 +29,7 @@ export function Splash({ ready }: { ready: boolean }) {
   useEffect(() => {
     if (!visible) return
     const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches
-    const id = window.setTimeout(() => setMinDone(true), reduce ? 700 : MIN_MS)
+    const id = window.setTimeout(() => setMinDone(true), reduce ? 1200 : MIN_MS)
     return () => window.clearTimeout(id)
   }, [visible])
 
