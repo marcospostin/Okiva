@@ -37,6 +37,15 @@ export function maskEmail(email: string) {
   return `${name[0]}•••${name[name.length - 1]}@${domain}`
 }
 
+/** Erro ao enviar e-mail (link ou código): mensagem sobre o envio, não sobre "entrar". */
+function sendError(err: { message?: string; status?: number }) {
+  const msg = err.message ?? ''
+  if (/rate limit|too many|seconds/i.test(msg)) return new ApiError('Muitos pedidos seguidos. Espere alguns minutos e tente de novo.', 429)
+  if (/fetch|network/i.test(msg)) return new ApiError('Sem conexão. Confira sua internet e tente de novo.', 0)
+  if (/invalid.*email|email.*invalid/i.test(msg)) return new ApiError('Confira o e-mail digitado.', 422)
+  return new ApiError('Não deu para enviar o e-mail agora. Tente de novo em alguns minutos.', err.status ?? 500)
+}
+
 /* ------------------------------------------------------------- segurança */
 
 export const securityApi = {
@@ -56,7 +65,7 @@ export const securityApi = {
     if (!USE_SUPABASE) return mock('voce@email.com')
     const email = await currentEmail()
     const { error } = await sb().auth.signInWithOtp({ email, options: { shouldCreateUser: false, emailRedirectTo: redirect } })
-    if (error) throw authError(error)
+    if (error) throw sendError(error)
     return email
   },
 
@@ -73,7 +82,7 @@ export const securityApi = {
     const { error } = await sb().auth.updateUser({ email: newEmail.trim().toLowerCase() }, { emailRedirectTo: window.location.origin })
     if (error) {
       if (/already|registered|exists/i.test(error.message)) throw new ApiError('Esse e-mail já é usado por outra conta.', 409)
-      throw authError(error)
+      throw sendError(error)
     }
   },
 
@@ -99,7 +108,7 @@ export const securityApi = {
   requestPasswordReset: async (email: string): Promise<void> => {
     if (!USE_SUPABASE) return mock(undefined)
     const { error } = await sb().auth.resetPasswordForEmail(email.trim().toLowerCase(), { redirectTo: window.location.origin })
-    if (error) throw authError(error)
+    if (error) throw sendError(error)
   },
 
   /** Encerra a sessão em todos os aparelhos (inclusive este). */

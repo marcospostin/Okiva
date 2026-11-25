@@ -400,7 +400,7 @@ function ForgotForm({ onBack }: { onBack: () => void }) {
       await securityApi.requestPasswordReset(email)
       setSent(true)
     } catch (err) {
-      setError(errorMessage(err, 'Não deu para enviar agora. Tente de novo.'))
+      setError(errorMessage(err, 'Não deu para enviar o e-mail agora. Tente de novo em alguns minutos.'))
     } finally {
       setLoading(false)
     }
