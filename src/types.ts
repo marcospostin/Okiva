@@ -137,6 +137,16 @@ export interface CategoryRule {
   category: CategoryId
 }
 
+/** Avisos que a pessoa quer receber. `news` (novidades) começa desligado: consentimento explícito. */
+export interface NotificationPrefs {
+  invoice_due: boolean
+  cap_alert: boolean
+  uncategorized: boolean
+  recurrence: boolean
+  weekly_summary: boolean
+  news: boolean
+}
+
 export type AccountKind = 'checking' | 'savings' | 'wallet'
 
 /** Conta da pessoa (onde o dinheiro está). Saldo da Home = soma de todas. */
@@ -200,6 +210,8 @@ export interface AppState {
   customCategories: CustomCategory[]
   /** Nomes que a pessoa já classificou: "sempre usar Alimentação para PAG*JOSE" */
   categoryRules: CategoryRule[]
+  /** Avisos que a pessoa quer receber (Conta → Notificações) */
+  notificationPrefs: NotificationPrefs
   /** Dados locais já receberam as categorias sugeridas (protótipo sem Supabase) */
   categoriesSeeded?: boolean
   /** Deposit history of every goal (newest first) */

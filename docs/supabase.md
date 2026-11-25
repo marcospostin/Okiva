@@ -23,6 +23,8 @@ Especificação de negócio: [modelo-de-dados.md](modelo-de-dados.md) · contrat
 | `supabase/migrations/20261123120000_okiva_contas_recorrencias_parcelas.sql` | receitas, contas, recorrências, parcelas, pagamento de fatura, aviso de teto |
 | `supabase/migrations/20261123180000_okiva_categorias_editaveis.sql` | categorias do app viram sugestões editáveis |
 | `supabase/migrations/20261124120000_okiva_sem_categoria_regras.sql` | gasto sem categoria e regras aprendidas |
+| `supabase/migrations/20261124180000_okiva_conta_suporte_seguranca.sql` | preferências de notificação, mensagens de suporte e confirmação por e-mail para apagar dados |
+| `supabase/templates/*.html` | e-mails em português (cadastro, código de confirmação, redefinir senha, trocar e-mail): colar no dashboard |
 | `supabase/seed.sql` | **seed temporário** da conta demo (mocks) |
 | `supabase/cleanup_demo.sql` | remove a conta demo e tudo dela |
 | `prisma/schema.prisma` | espelho do schema em Prisma (só documentação) |

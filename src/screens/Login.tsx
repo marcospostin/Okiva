@@ -1,14 +1,15 @@
-import { Camera, Check, Eye, EyeOff, Sparkles } from 'lucide-react'
+import { ArrowLeft, Camera, Check, Eye, EyeOff, Sparkles } from 'lucide-react'
 import { useRef, useState, type FormEvent } from 'react'
-import { cx, Field, inputClass, MoneyInput, PrimaryButton } from '../components/ui'
+import { cx, Field, inputClass, MoneyInput, PrimaryButton, RoundButton } from '../components/ui'
 import { readAvatar } from '../lib/image'
-import { signIn, signUp, startDemo } from '../services/auth'
+import { finishRecovery, signIn, signUp, startDemo } from '../services/auth'
+import { securityApi } from '../services/settings'
 import { errorMessage, USE_SUPABASE } from '../services/http'
 import { accountState, useStore } from '../state/store'
 import { useUI } from '../state/ui'
 import type { AppState, User } from '../types'
 
-type Mode = 'login' | 'signup'
+type Mode = 'login' | 'signup' | 'forgot' | 'reset'
 
 /** Saindo da demonstração por "Criar minha conta": o login abre direto no cadastro. */
 export const SIGNUP_NEXT_KEY = 'okiva:signup-next'
@@ -25,8 +26,13 @@ function initialMode(): Mode {
   return 'login'
 }
 
-export default function Login() {
-  const [mode, setMode] = useState<Mode>(initialMode)
+/**
+ * `recovery`: chegou pelo link "Esqueci minha senha". A sessão de recuperação NÃO abre o app:
+ * a pessoa só cria a senha nova; depois a sessão é encerrada (em todos os aparelhos) e ela entra
+ * de novo com a senha nova.
+ */
+export default function Login({ recovery, onRecoveryDone, notice }: { recovery?: boolean; onRecoveryDone?: () => void; notice?: string }) {
+  const [mode, setMode] = useState<Mode>(() => (recovery ? 'reset' : initialMode()))
   return (
     // Desktop: form in a fixed column (400px form + 96px air each side) and the hero card
     // takes the rest, with the same 48px margin on its outer sides. Keeps card→form and
@@ -34,7 +40,7 @@ export default function Login() {
     <div className="grid min-h-dvh bg-esk-bg md:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_592px] 3xl:grid-cols-[minmax(0,1fr)_656px]">
       <div className="hidden p-6 md:block lg:p-12 lg:pr-0">
         <div className="flex h-full flex-col justify-between rounded-[34px] p-10 text-esk-ink lg:p-14" style={{ backgroundImage: 'var(--esk-gradient-hero)' }}>
-          <p className="font-sat text-[44px] leading-none font-bold tracking-[-1.4px] 3xl:text-[56px]">Okiva</p>
+          <p className="font-sat text-[54px] leading-none font-bold tracking-[-1.7px] 3xl:text-[66px]">Okiva</p>
           <div>
             <p className="max-w-[460px] font-sat text-[44px] leading-[1.05] font-medium tracking-[-1.8px] 3xl:text-[56px]">
               Registre gastos, acompanhe cartões e guarde para o que importa.
@@ -48,18 +54,40 @@ export default function Login() {
 
       <div className="flex flex-col justify-center px-[32px] py-12 md:px-12 lg:px-24 3xl:px-32">
         <div className="mx-auto w-full max-w-[400px]">
-          <p className="font-sat text-[34px] leading-none font-bold tracking-[-1px] text-esk-lime md:hidden">Okiva</p>
-          {mode === 'login' ? <LoginForm onSwitch={() => setMode('signup')} /> : <SignupForm onSwitch={() => setMode('login')} />}
+          <p className="font-sat text-[42px] leading-none font-bold tracking-[-1.2px] text-esk-lime md:hidden">Okiva</p>
+          {mode === 'login' && <LoginForm onSwitch={() => setMode('signup')} onForgot={() => setMode('forgot')} />}
+          {mode === 'signup' && <SignupForm onSwitch={() => setMode('login')} />}
+          {mode === 'forgot' && <ForgotForm onBack={() => setMode('login')} />}
+          {mode === 'reset' && (
+            <ResetForm
+              onDone={() => {
+                onRecoveryDone?.()
+                setMode('login')
+              }}
+            />
+          )}
+          {notice && mode === 'login' && <p role="status" className="mt-6 rounded-[16px] bg-esk-elevated px-4 py-3 font-sat text-[14px] text-esk-lime-soft">{notice}</p>}
         </div>
       </div>
     </div>
   )
 }
 
-function Header({ title, text }: { title: string; text: string }) {
+function Header({ title, text, onBack }: { title: string; text: string; onBack?: () => void }) {
+  const heading = <h1 className="font-sat text-[34px] leading-[1.1] font-medium tracking-[-1.3px] text-white">{title}</h1>
   return (
     <>
-      <h1 className="pt-6 font-sat text-[34px] leading-[1.1] font-medium tracking-[-1.3px] text-white md:pt-0">{title}</h1>
+      {onBack ? (
+        // Mesmo padrão dos cabeçalhos do app (ScreenHeader): botão redondo de voltar ao lado do título
+        <div className="flex items-center gap-3 pt-6 md:pt-0">
+          <RoundButton label="Voltar" onClick={onBack}>
+            <ArrowLeft size={19} strokeWidth={1.6} />
+          </RoundButton>
+          {heading}
+        </div>
+      ) : (
+        <div className="pt-6 md:pt-0">{heading}</div>
+      )}
       <p className="pt-3 font-sat text-[15px] text-esk-muted">{text}</p>
     </>
   )
@@ -152,7 +180,7 @@ function passwordScore(p: string) {
   return score
 }
 
-function PasswordStrength({ id, password }: { id: string; password: string }) {
+export function PasswordStrength({ id, password }: { id: string; password: string }) {
   if (!password) return null
   const score = passwordScore(password)
   const level = STRENGTH[score]
@@ -198,7 +226,7 @@ function PasswordStrength({ id, password }: { id: string; password: string }) {
   )
 }
 
-function PasswordInput({
+export function PasswordInput({
   id,
   autoComplete,
   value,
@@ -248,7 +276,7 @@ function useEnter() {
 
 /* ------------------------------------------------------------------ Login */
 
-function LoginForm({ onSwitch }: { onSwitch: () => void }) {
+function LoginForm({ onSwitch, onForgot }: { onSwitch: () => void; onForgot: () => void }) {
   const enter = useEnter()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -294,7 +322,14 @@ function LoginForm({ onSwitch }: { onSwitch: () => void }) {
         <Field label="Senha" htmlFor="password" error={show(errors.password)} attempt={tries}>
           <PasswordInput id="password" autoComplete="current-password" value={password} onChange={setPassword} />
         </Field>
-        <RememberMe checked={remember} onChange={setRemember} />
+        <div className="flex items-center justify-between gap-3">
+          <RememberMe checked={remember} onChange={setRemember} />
+          {REAL_AUTH && (
+            <button type="button" onClick={onForgot} className="font-sat text-[14px] font-medium text-esk-lime-soft hover:underline">
+              Esqueci minha senha
+            </button>
+          )}
+        </div>
         <FormError message={error} />
         <PrimaryButton type="submit" className="mt-2" loading={loading} loadingText="Entrando…">
           Entrar
@@ -342,6 +377,118 @@ function DemoEntry() {
         Entre como Lucas, com dados de exemplo, sem cadastro. Tudo é apagado quando você sai.
       </p>
     </div>
+  )
+}
+
+/* ------------------------------------------------------- Esqueci a senha */
+
+function ForgotForm({ onBack }: { onBack: () => void }) {
+  const [email, setEmail] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [sent, setSent] = useState(false)
+  const [tries, setTries] = useState(0)
+  const [error, setError] = useState<string>()
+  const emailError = !email.trim() ? 'Digite seu e-mail.' : !EMAIL_RE.test(email.trim()) ? 'Confira o e-mail.' : undefined
+
+  async function submit(e: FormEvent) {
+    e.preventDefault()
+    setTries((n) => n + 1)
+    setError(undefined)
+    if (emailError) return
+    setLoading(true)
+    try {
+      await securityApi.requestPasswordReset(email)
+      setSent(true)
+    } catch (err) {
+      setError(errorMessage(err, 'Não deu para enviar agora. Tente de novo.'))
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  if (sent) {
+    return (
+      <>
+        <Header onBack={onBack} title="Confira seu e-mail" text={`Se existir uma conta com ${email.trim()}, enviamos um link para criar uma senha nova. O link vale por 1 hora.`} />
+        <div className="flex flex-col gap-4 pt-10">
+          <p className="font-sat text-[13px] text-esk-subtle">Não chegou? Veja a caixa de spam ou tente de novo em alguns minutos.</p>
+          <PrimaryButton onClick={onBack}>Voltar para o login</PrimaryButton>
+        </div>
+      </>
+    )
+  }
+
+  return (
+    <>
+      <Header onBack={onBack} title="Esqueceu a senha?" text="Digite o e-mail da sua conta. Enviamos um link para você criar uma senha nova." />
+      <form noValidate className="flex flex-col gap-5 pt-10" onSubmit={submit}>
+        <Field label="E-mail" htmlFor="forgot-email" error={tries ? emailError : undefined} attempt={tries}>
+          <input id="forgot-email" type="email" autoComplete="email" className={inputClass} placeholder="voce@email.com" value={email} onChange={(e) => setEmail(e.target.value)} autoFocus />
+        </Field>
+        <FormError message={error} />
+        <PrimaryButton type="submit" loading={loading} loadingText="Enviando…">
+          Enviar link
+        </PrimaryButton>
+        <SwitchLink text="Lembrou?" action="Voltar para o login" onClick={onBack} />
+      </form>
+    </>
+  )
+}
+
+/* --------------------------------------------- Senha nova (link do e-mail) */
+
+function ResetForm({ onDone }: { onDone: () => void }) {
+  const { notify } = useUI()
+  const [next, setNext] = useState('')
+  const [confirm, setConfirm] = useState('')
+  const [tries, setTries] = useState(0)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string>()
+  const errors = {
+    next: !next ? 'Crie uma senha nova.' : !passwordMeetsRules(next) ? 'A senha ainda não atende aos requisitos abaixo.' : undefined,
+    confirm: confirm !== next ? 'As senhas não são iguais.' : undefined,
+  }
+
+  async function submit(e: FormEvent) {
+    e.preventDefault()
+    setTries((n) => n + 1)
+    setError(undefined)
+    if (errors.next || errors.confirm) return
+    setLoading(true)
+    try {
+      await securityApi.setNewPassword(next)
+      await finishRecovery()
+      notify('Senha alterada. Entre com a senha nova.')
+      onDone()
+    } catch (err) {
+      setError(errorMessage(err, 'Não deu para salvar a senha. Peça um link novo.'))
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function cancel() {
+    await finishRecovery()
+    onDone()
+  }
+
+  return (
+    <>
+      <Header onBack={cancel} title="Crie uma senha nova" text="Escolha uma senha para entrar no Okiva. Depois de salvar, você entra de novo com ela em todos os aparelhos." />
+      <form noValidate className="flex flex-col gap-5 pt-10" onSubmit={submit}>
+        <Field label="Senha nova" htmlFor="reset-pass" error={tries ? errors.next : undefined} attempt={tries}>
+          <PasswordInput id="reset-pass" autoComplete="new-password" value={next} onChange={setNext} describedBy="reset-strength" />
+          <PasswordStrength id="reset-strength" password={next} />
+        </Field>
+        <Field label="Confirmar senha nova" htmlFor="reset-pass2" error={tries ? errors.confirm : undefined} attempt={tries}>
+          <PasswordInput id="reset-pass2" autoComplete="new-password" value={confirm} onChange={setConfirm} />
+        </Field>
+        <FormError message={error} />
+        <PrimaryButton type="submit" loading={loading} loadingText="Salvando…">
+          Salvar senha nova
+        </PrimaryButton>
+      </form>
+    </>
   )
 }
 
@@ -402,7 +549,7 @@ function SignupForm({ onSwitch }: { onSwitch: () => void }) {
   if (confirmEmail) {
     return (
       <>
-        <Header title="Confirme seu e-mail." text={`Enviamos um link para ${confirmEmail}. Abra o link para ativar sua conta e depois entre com sua senha.`} />
+        <Header onBack={onSwitch} title="Confirme seu e-mail." text={`Enviamos um link para ${confirmEmail}. Abra o link para ativar sua conta e depois entre com sua senha.`} />
         <div className="flex flex-col gap-5 pt-8">
           <PrimaryButton onClick={onSwitch}>Ir para o login</PrimaryButton>
           <p className="text-center font-sat text-[13px] text-esk-subtle">Não chegou? Confira o spam ou tente de novo em alguns minutos.</p>
@@ -413,7 +560,7 @@ function SignupForm({ onSwitch }: { onSwitch: () => void }) {
 
   return (
     <>
-      <Header title="Crie sua conta." text="Leva menos de um minuto. Depois é só registrar seus gastos." />
+      <Header onBack={onSwitch} title="Crie sua conta." text="Leva menos de um minuto. Depois é só registrar seus gastos." />
       <form noValidate className="flex flex-col gap-5 pt-8" onSubmit={submit}>
         <div className="flex items-center gap-4">
           <button

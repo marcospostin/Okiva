@@ -8,7 +8,10 @@
  *   rodam em triggers no banco; o store do front aplica as mesmas regras localmente.
  */
 import type { PostgrestError } from '@supabase/supabase-js'
-import type { Account, AppState, CapAlert, Card, CategoryId, CategoryRule, CustomCategory, Goal, GoalDeposit, InvoiceImport, Recurrence, Stage, Transaction, User } from '../types'
+import type { Account, AppState, CapAlert, Card, CategoryId, CategoryRule, CustomCategory, Goal, GoalDeposit, InvoiceImport, NotificationPrefs, Recurrence, Stage, Transaction, User } from '../types'
+import { initialState } from '../data/mock'
+
+const initialPrefs = initialState.notificationPrefs
 import type { Database } from './database.types'
 import type {
   AccountInput,
@@ -225,6 +228,7 @@ export async function loadAccount(): Promise<AppState> {
     transactions: txs.map(toTx),
     accounts: accounts.map(toAccount),
     recurrences: recurrences.map(toRecurrence),
+    notificationPrefs: { ...initialPrefs, ...((profile.notification_prefs ?? {}) as Partial<NotificationPrefs>) },
     categoryRules: rules.map((r): CategoryRule => ({ id: r.id, pattern: r.pattern, category: r.category })),
     cards: cards.map(toCard),
     cardOrder: cards.map((c) => c.id),

@@ -1,19 +1,27 @@
 import { useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { CATEGORY_PALETTE, categoryIds, categoryMeta, findCategoryByLabel, hasCategory, nextCustomColor } from '../data/categories'
+import { CATEGORY_PALETTE, categoryMeta, findCategoryByLabel, hasCategory, nextCustomColor } from '../data/categories'
 import { chipTextWidth, CHIP, fitChips, suggestCategories } from '../lib/categorySuggestions'
-import { Camera, ChevronRight, FileText, MessageCircle, Plus, Sparkles } from 'lucide-react'
-import { CategoryRowIcon } from '../components/icons'
-import { Avatar, Chip, cx, Field, inputClass, MoneyInput, PrimaryButton, Sheet, Spinner, Switch } from '../components/ui'
+import { ChevronRight, FileText, MessageCircle, Plus, Sparkles } from 'lucide-react'
+import { Chip, cx, Field, inputClass, MoneyInput, PrimaryButton, Sheet, Switch } from '../components/ui'
 import { brl, brlShort, longDate, pct, privateExpense, privateMoney } from '../lib/format'
-import { balanceOf, currentMonth, forgetAccountData, methodLabel, todayISO, useStore } from '../state/store'
-import { deleteLocalAccount, setDemoAvatar, signOut, updateAccount } from '../services/auth'
-import { accountApi, budgetApi, cardsApi, categoriesApi, goalsApi, invoicesApi, rulesApi, transactionsApi } from '../services/finance'
-import { setToken, USE_SUPABASE } from '../services/http'
-import { readAvatar } from '../lib/image'
+import { balanceOf, currentMonth, todayISO, useStore } from '../state/store'
+import { accountApi, budgetApi, cardsApi, categoriesApi, goalsApi, invoicesApi, rulesApi } from '../services/finance'
 import { useMutation } from '../state/useMutation'
 import { useUI, type SheetState, type View } from '../state/ui'
-import { BankAccountSheet, CapAlertSheet, CategorizeSheet, ConfirmDelete, EntrySheet, PayInvoiceSheet, RecurrenceSheet, TransactionSheet, useLast } from './MoneySheets'
-import type { CategoryId, Goal, PaymentMethod, Transaction } from '../types'
+import {
+  BugReportSheet,
+  ChangeEmailSheet,
+  ChangePasswordSheet,
+  HelpSheet,
+  NotificationsSheet,
+  PlanSheet,
+  ProfileSheet,
+  RateSheet,
+  SecuritySheet,
+  VerifyActionSheet,
+} from './SettingsSheets'
+import { BankAccountSheet, CapAlertSheet, CategorizeSheet, ReportDetailSheet, ConfirmDelete, EntrySheet, PayInvoiceSheet, RecurrenceSheet, TransactionSheet, useLast } from './MoneySheets'
+import type { CategoryId, Goal } from '../types'
 
 export default function SheetHost() {
   const { sheet, closeSheet } = useUI()
@@ -33,6 +41,8 @@ function SheetSwitch({ sheet, close }: { sheet: SheetState; close: () => void })
       return <BankAccountSheet close={close} id={sheet.id} />
     case 'recurrence':
       return <RecurrenceSheet close={close} id={sheet.id} />
+    case 'reportDetail':
+      return <ReportDetailSheet close={close} title={sheet.title} subtitle={sheet.subtitle} ids={sheet.ids} category={sheet.category} />
     case 'categorize':
       return <CategorizeSheet close={close} id={sheet.id} />
     case 'capAlert':
@@ -51,8 +61,26 @@ function SheetSwitch({ sheet, close }: { sheet: SheetState; close: () => void })
       return <CapSheet close={close} />
     case 'balance':
       return <BalanceSheet close={close} />
-    case 'account':
-      return <AccountSheet close={close} />
+    case 'plan':
+      return <PlanSheet close={close} />
+    case 'security':
+      return <SecuritySheet close={close} />
+    case 'changeEmail':
+      return <ChangeEmailSheet />
+    case 'changePassword':
+      return <ChangePasswordSheet close={close} />
+    case 'newPassword':
+      return <ChangePasswordSheet recovery close={close} />
+    case 'notifications':
+      return <NotificationsSheet close={close} />
+    case 'help':
+      return <HelpSheet close={close} />
+    case 'bug':
+      return <BugReportSheet close={close} />
+    case 'rate':
+      return <RateSheet close={close} />
+    case 'verifyAction':
+      return <VerifyActionSheet close={close} action={sheet.action} confirmed={sheet.confirmed} />
     case 'plus':
       return <PlusSheet close={close} then={sheet.then} />
     case 'profile':
@@ -380,185 +408,6 @@ function BudgetSheet({ close, category }: { close: () => void; category?: Catego
           </button>
         )}
       </form>
-    </Sheet>
-  )
-}
-
-/* --------------------------------------------------------------- Conta */
-
-function AccountSheet({ close }: { close: () => void }) {
-  const { state, dispatch } = useStore()
-  const { notify, navigate, openSheet } = useUI()
-  const { run, pending } = useMutation()
-  const [confirm, setConfirm] = useState(false)
-  const [confirmClear, setConfirmClear] = useState(false)
-  const photoInput = useRef<HTMLInputElement>(null)
-  // Demonstração: conta temporária sem e-mail; a foto fica só na aba; sair apaga tudo
-  const demo = !!state.user?.demo
-
-  async function setPhoto(avatar?: string) {
-    const user = state.user
-    if (!user) return
-    // Demonstração: a foto fica só nesta aba do navegador (nada vai ao Storage nem ao banco)
-    if (demo) {
-      setDemoAvatar(avatar)
-      dispatch({ type: 'setAvatar', avatar })
-      notify(avatar ? 'Foto atualizada (só nesta demonstração)' : 'Foto do Lucas de volta')
-      return
-    }
-    await run(
-      'photo',
-      () => accountApi.updateProfile({ avatar }),
-      () => {
-        dispatch({ type: 'setAvatar', avatar })
-        // Keep the photo on the account so it survives logout / login
-        updateAccount({ ...user, avatar })
-      },
-      avatar ? 'Foto atualizada' : 'Foto removida',
-    )
-  }
-
-  async function pickPhoto(file?: File) {
-    if (!file) return
-    try {
-      await setPhoto(await readAvatar(file))
-    } catch (err) {
-      notify((err as Error).message, 'error')
-    }
-  }
-
-  return (
-    <Sheet title="Conta" onClose={close}>
-      <div className="flex items-center gap-4">
-        <button
-          type="button"
-          onClick={() => photoInput.current?.click()}
-          aria-label="Trocar foto"
-          disabled={pending === 'photo'}
-          className="group relative shrink-0 rounded-full"
-        >
-          <Avatar user={state.user} size={64} />
-          {pending === 'photo' && (
-            <span className="absolute inset-0 grid animate-fade-in place-items-center rounded-full bg-black/50 text-esk-lime">
-              <Spinner />
-            </span>
-          )}
-          <span className="absolute -right-1 -bottom-1 grid size-[26px] place-items-center rounded-full bg-esk-lime text-esk-ink ring-2 ring-esk-surface transition group-hover:scale-110">
-            <Camera size={13} strokeWidth={2} />
-          </span>
-        </button>
-        <div className="min-w-0">
-          <p className="flex items-center gap-2 font-sat text-[19px] font-medium text-white">
-            {state.user?.name}
-            {state.user?.role === 'admin' && (
-              <span className="rounded-full bg-esk-lilac px-2 py-[2px] font-mono text-[10px] font-medium tracking-[0.8px] text-esk-ink" title="Acesso total ao banco de dados">
-                ADMIN
-              </span>
-            )}
-          </p>
-          <p className="truncate font-sat text-[14px] text-esk-muted">{demo ? 'Conta de demonstração' : state.user?.email}</p>
-          <div className="flex flex-wrap gap-x-3 gap-y-1 pt-1">
-            {/* Perfil (e-mail, excluir conta) não se aplica à conta temporária da demonstração */}
-            {!demo && (
-              <button type="button" onClick={() => openSheet({ type: 'profile' })} className="font-sat text-[13px] font-medium text-esk-lime hover:underline">
-                Editar perfil
-              </button>
-            )}
-            <button type="button" onClick={() => photoInput.current?.click()} className="font-sat text-[13px] font-medium text-esk-lime hover:underline">
-              Trocar foto
-            </button>
-            {state.user?.avatar && (
-              <button type="button" onClick={() => setPhoto(undefined)} className="font-sat text-[13px] text-esk-subtle hover:text-white">
-                {demo ? 'Voltar à foto do Lucas' : 'Remover'}
-              </button>
-            )}
-          </div>
-        </div>
-        <input ref={photoInput} type="file" accept="image/*" className="hidden" onChange={(e) => { pickPhoto(e.target.files?.[0]); e.target.value = '' }} />
-      </div>
-      <div className="mt-6 flex flex-col rounded-[24px] bg-esk-elevated px-5">
-        <button type="button" onClick={() => openSheet({ type: 'balance' })} className="flex items-center justify-between gap-4 py-4 text-left transition hover:opacity-80">
-          <span className="font-sat text-[15px] text-white">Ajustar saldo</span>
-          <span className="font-sat text-[14px] text-esk-muted">{privateMoney(brlShort(balanceOf(state)), state.hideBalance)}</span>
-        </button>
-        <div className="flex items-center justify-between gap-4 border-t border-esk-border py-4">
-          <span className="font-sat text-[15px] text-white">Ocultar saldo</span>
-          <Switch label="Ocultar saldo" checked={state.hideBalance} onChange={() => dispatch({ type: 'toggleHide' })} />
-        </div>
-        <div className="flex items-center justify-between gap-4 border-t border-esk-border py-4">
-          <span className="flex flex-col">
-            <span className="font-sat text-[15px] text-white">Okiva Plus</span>
-            <span className="font-sat text-[12px] text-esk-subtle">Leitura de fatura e assistente com IA</span>
-          </span>
-          <Switch
-            label="Okiva Plus"
-            checked={state.stage === 2}
-            onChange={(on) => {
-              dispatch({ type: 'setStage', stage: on ? 2 : 1 })
-              notify(on ? 'Okiva Plus ativado' : 'Modo manual', on ? 'success' : 'info')
-            }}
-          />
-        </div>
-        {/* Only in the local prototype: with Supabase the example data lives in the demo account */}
-        {!USE_SUPABASE && (
-          <button
-            type="button"
-            onClick={() => {
-              dispatch({ type: 'reset' })
-              notify('Dados de exemplo restaurados')
-            }}
-            className="border-t border-esk-border py-4 text-left font-sat text-[15px] text-white transition hover:opacity-80"
-          >
-            Carregar dados de exemplo
-          </button>
-        )}
-        {confirmClear ? (
-          <div className="flex animate-rise flex-col gap-3 border-t border-esk-border py-4">
-            <p className="font-sat text-[14px] text-white">Apagar gastos, cartões, metas, faturas, tetos e categorias desta conta? A conta continua. Não dá para desfazer.</p>
-            <div className="grid grid-cols-2 gap-3">
-              <PrimaryButton tone="dark" onClick={() => setConfirmClear(false)} disabled={!!pending}>Cancelar</PrimaryButton>
-              <PrimaryButton
-                loading={pending === 'clear'}
-                loadingText="Apagando…"
-                onClick={async () => {
-                  if (await run('clear', () => accountApi.clearData(), () => dispatch({ type: 'clearData' }), 'Conta zerada', 'Não deu para apagar os dados.')) setConfirmClear(false)
-                }}
-              >
-                Apagar
-              </PrimaryButton>
-            </div>
-          </div>
-        ) : (
-          <button type="button" onClick={() => setConfirmClear(true)} className="border-t border-esk-border py-4 text-left font-sat text-[15px] text-esk-lilac transition hover:opacity-80">
-            Começar do zero
-          </button>
-        )}
-      </div>
-      {confirm ? (
-        <div className="mt-6 flex animate-rise flex-col gap-3">
-          <p className="font-sat text-[17px] font-medium text-white">{demo ? 'Sair da demonstração?' : 'Deseja sair?'}</p>
-          {demo && <p className="-mt-1 font-sat text-[13px] text-esk-subtle">Os dados de exemplo desta visita serão apagados.</p>}
-          <div className="grid grid-cols-2 gap-3">
-            <PrimaryButton tone="dark" onClick={() => setConfirm(false)}>
-              Ficar
-            </PrimaryButton>
-            <PrimaryButton
-              onClick={() => {
-                navigate('home')
-                signOut()
-                setToken(null)
-                dispatch({ type: 'logout' })
-              }}
-            >
-              Sair
-            </PrimaryButton>
-          </div>
-        </div>
-      ) : (
-        <PrimaryButton tone="danger" className="mt-6" onClick={() => setConfirm(true)}>
-          {demo ? 'Sair da demonstração' : 'Sair'}
-        </PrimaryButton>
-      )}
     </Sheet>
   )
 }
@@ -904,79 +753,6 @@ function DepositSheet({ close, id }: { close: () => void; id: string }) {
     </Sheet>
   )
 }
-
-/* ------------------------------------------------------------ Perfil */
-
-function ProfileSheet({ close }: { close: () => void }) {
-  const { state, dispatch } = useStore()
-  const { openSheet, navigate } = useUI()
-  const { run, pending } = useMutation()
-  const user = state.user
-  const [name, setName] = useState(user?.name ?? '')
-  const [tries, setTries] = useState(0)
-  const [confirm, setConfirm] = useState(false)
-  if (!user) return null
-  const nameError = tries && !name.trim() ? 'Digite seu nome.' : undefined
-
-  async function save() {
-    setTries((n) => n + 1)
-    const value = name.trim()
-    if (!value || !user) return
-    const ok = await run(
-      'save',
-      () => accountApi.updateProfile({ name: value }),
-      () => {
-        dispatch({ type: 'setName', name: value })
-        updateAccount({ ...user, name: value })
-      },
-      'Perfil atualizado',
-    )
-    if (ok) openSheet({ type: 'account' })
-  }
-
-  return (
-    <Sheet title="Editar perfil" onClose={() => openSheet({ type: 'account' })}>
-      <form className="flex flex-col gap-5" onSubmit={(e) => { e.preventDefault(); save() }}>
-        <Field label="Nome" htmlFor="pname" error={nameError} attempt={tries}>
-          <input id="pname" className={inputClass} value={name} onChange={(e) => setName(e.target.value)} maxLength={40} autoComplete="name" autoFocus />
-        </Field>
-        <Field label="E-mail" htmlFor="pemail">
-          <input id="pemail" className={cx(inputClass, 'text-esk-muted')} value={user.email} readOnly aria-describedby="pemail-hint" />
-        </Field>
-        <p id="pemail-hint" className="-mt-3 font-sat text-[12px] text-esk-subtle">O e-mail é o seu login e não muda por aqui.</p>
-        <PrimaryButton type="submit" loading={pending === 'save'}>
-          Salvar perfil
-        </PrimaryButton>
-        <ConfirmDelete
-          open={confirm}
-          onOpen={() => setConfirm(true)}
-          onCancel={() => setConfirm(false)}
-          label="Excluir conta"
-          question="Excluir sua conta e todos os dados dela (gastos, cartões, metas, faturas e categorias)? Não dá para desfazer."
-          loading={pending === 'delete'}
-          onConfirm={async () => {
-            await run(
-              'delete',
-              () => accountApi.deleteAccount(),
-              () => {
-                forgetAccountData(user.email)
-                deleteLocalAccount(user.email)
-                setToken(null)
-                close()
-                navigate('home')
-                dispatch({ type: 'logout' })
-              },
-              'Conta excluída',
-              'Não deu para excluir a conta. Tente de novo.',
-            )
-          }}
-        />
-      </form>
-    </Sheet>
-  )
-}
-
-/* ------------------------------------------------------- Categorias */
 
 function CategoriesSheet({ close }: { close: () => void }) {
   const { state } = useStore()

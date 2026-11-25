@@ -97,6 +97,31 @@ escolhida; recorrências vão para a escolhida ou `outros`; teto e regras dela s
 | Cartões | "Pagar fatura" (escolhe a conta e o valor; pagamento parcial permitido) |
 | Metas | sino de aviso em cada teto; "Categorias" (CRUD completo + nomes aprendidos); mesmo sheet para todas as metas |
 
+## Tela Conta (etapa 9)
+
+Migration `20261124180000_okiva_conta_suporte_seguranca.sql`. Toque no avatar da Home → tela **Conta** (`src/screens/Settings.tsx`,
+sheets em `src/sheets/SettingsSheets.tsx`).
+
+| Seção | O que faz |
+|---|---|
+| Plano | status Plus/Padrão; assinar ou cancelar (sem cobrança enquanto o pagamento não existir) |
+| Preferências | Ocultar saldo; Notificações (`profiles.notification_prefs`; "Novidades" começa desligado) |
+| Segurança e login | trocar e-mail (link de confirmação, pede a senha), trocar senha (pede a atual), sair de todos os aparelhos, excluir conta |
+| Ajuda | perguntas frequentes, mensagem (`support_requests`), e-mail, relatar problema (com dados do aparelho), avaliar |
+| Privacidade | política de privacidade e termos (`src/screens/Legal.tsx`, **rascunho**), baixar meus dados (JSON) |
+| Dados da conta | Começar do zero |
+
+**Ações sem volta** (Começar do zero, Excluir conta): senha atual + código enviado ao e-mail (`signInWithOtp` / `verifyOtp`).
+O banco confere: `clear_my_data` só roda se a sessão foi verificada por e-mail nos últimos 15 min (`recent_email_verification`,
+claim `amr` do JWT). Conta de demonstração: basta digitar ZERAR/EXCLUIR. O link do e-mail também funciona: volta com
+`?confirmar=reset|delete` e abre direto a confirmação final.
+
+**Login**: "Esqueci minha senha" envia o link de redefinição; ao voltar (`type=recovery`) abre "Crie uma senha nova".
+
+Para os e-mails saírem em português e com o código, cole no Supabase (Authentication → Emails → Templates):
+`supabase/templates/codigo-confirmacao.html` em **Magic link**, `redefinir-senha.html` em **Reset password** e
+`trocar-email.html` em **Change email address**.
+
 ## Pendências conhecidas
 
 - O site publicado na Vercel usa o código anterior a estas etapas e lê o saldo em `profiles.starting_balance` (agora 0):

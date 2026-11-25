@@ -6,7 +6,7 @@ import { DEMO_USER, initialState, TODAY } from '../data/mock'
 import { restoreSession, sessionEmail, signOut } from '../services/auth'
 import { monthKey, toISO } from '../lib/format'
 import { adjustInvoice, balanceEffect, ensureAccounts, isExpense, kindOf, processDueLocal, round2 } from '../lib/ledger'
-import type { Account, AppState, Budget, CapAlert, Card, CategoryId, CategoryRule, CustomCategory, Goal, GoalDeposit, InvoiceImport, Recurrence, Stage, Transaction, User } from '../types'
+import type { Account, AppState, Budget, CapAlert, Card, CategoryId, CategoryRule, CustomCategory, Goal, GoalDeposit, InvoiceImport, NotificationPrefs, Recurrence, Stage, Transaction, User } from '../types'
 
 /** Each account keeps its own data: okiva:data:<email> */
 const dataKey = (email: string) => `okiva:data:${email}`
@@ -62,6 +62,7 @@ type Action =
   /** Apaga todas as parcelas de uma compra */
   | { type: 'deleteGroup'; group: string }
   | { type: 'setCapAlert'; category: CategoryId; alert: CapAlert }
+  | { type: 'setNotifications'; prefs: NotificationPrefs }
 
 /** Keeps a card's invoice in sync: posted card expenses add, invoice payments subtract. */
 const invoiceOf = (cards: Card[], tx: Transaction, sign: 1 | -1) => adjustInvoice(cards, tx, sign, todayISO())
@@ -176,6 +177,8 @@ function reducer(state: AppState, action: Action): AppState {
     }
     case 'deleteRule':
       return { ...state, categoryRules: state.categoryRules.filter((r) => r.id !== action.id) }
+    case 'setNotifications':
+      return { ...state, notificationPrefs: action.prefs }
     case 'setCapAlert':
       return { ...state, budget: { ...state.budget, alerts: { ...state.budget.alerts, [action.category]: action.alert } } }
     case 'importInvoice': {
@@ -336,6 +339,7 @@ function parseState(raw: string): AppState {
   saved.invoices = saved.invoices ?? []
   saved.recurrences = saved.recurrences ?? []
   saved.categoryRules = saved.categoryRules ?? []
+  saved.notificationPrefs = { ...initialState.notificationPrefs, ...saved.notificationPrefs }
   // Saves made before the deposit history: example goals get their example deposits
   saved.deposits = saved.deposits ?? initialState.deposits.filter((d) => saved.goals.some((g) => g.id === d.goalId && g.deposited === initialState.goals.find((x) => x.id === g.id)?.deposited))
   // Saves made before deposit tracking: example goals get the new realistic data,

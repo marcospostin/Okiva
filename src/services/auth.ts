@@ -59,7 +59,7 @@ const nameFromEmail = (email: string) => {
 /** Resultado do login/cadastro: conta pronta (com os dados do banco) ou e-mail a confirmar. */
 export type AuthResult = { user: User; state?: AppState } | { confirmEmail: string }
 
-function authError(err: { message?: string; status?: number } | null): ApiError {
+export function authError(err: { message?: string; status?: number } | null): ApiError {
   const msg = err?.message ?? ''
   if (/invalid login credentials/i.test(msg)) return new ApiError('E-mail ou senha incorretos.', 400)
   if (/email not confirmed/i.test(msg)) return new ApiError('Confirme seu e-mail pelo link que enviamos antes de entrar.', 400)
@@ -205,6 +205,71 @@ export async function restoreSupabaseSession(): Promise<AppState | null> {
     await sb().auth.signOut({ scope: 'local' })
     return null
   }
+}
+
+/* ------------------------------------------------- recuperação de senha */
+
+const RECOVERY_KEY = 'okiva:recovery-pending'
+
+/** Chegou pelo link "Esqueci minha senha": marca para a sessão não abrir o app nem se fechar a aba. */
+export function markRecoveryPending() {
+  try {
+    localStorage.setItem(RECOVERY_KEY, '1')
+  } catch {
+    /* sem storage: vale a checagem do token */
+  }
+}
+
+function recoveryFlag() {
+  try {
+    return localStorage.getItem(RECOVERY_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Sessão aberta pelo link de recuperação de senha. Ela serve só para criar a senha nova:
+ * o app não carrega a conta enquanto isso não acontecer (nem depois de recarregar a página).
+ * Obs.: o Supabase registra essa sessão como "otp" (igual a um link mágico), então a marca
+ * vem do próprio link (type=recovery na URL ou o evento PASSWORD_RECOVERY), guardada até o fim.
+ */
+export async function isRecoverySession(): Promise<boolean> {
+  if (!USE_SUPABASE) return false
+  const { data } = await sb().auth.getSession()
+  if (!data.session) {
+    try {
+      localStorage.removeItem(RECOVERY_KEY)
+    } catch {
+      /* ignore */
+    }
+    return false
+  }
+  return recoveryFlag()
+}
+
+/** Avisa se um link de recuperação abrir sessão com o app já aberto (outra aba, mesmo navegador). */
+export function onPasswordRecovery(cb: () => void): () => void {
+  if (!USE_SUPABASE) return () => undefined
+  const { data } = sb().auth.onAuthStateChange((event) => {
+    if (event === 'PASSWORD_RECOVERY') {
+      markRecoveryPending()
+      cb()
+    }
+  })
+  return () => data.subscription.unsubscribe()
+}
+
+/** Fim da recuperação (senha salva ou cancelada): encerra a sessão em todos os aparelhos. */
+export async function finishRecovery() {
+  try {
+    localStorage.removeItem(RECOVERY_KEY)
+  } catch {
+    /* ignore */
+  }
+  if (!USE_SUPABASE) return
+  const { error } = await sb().auth.signOut({ scope: 'global' })
+  if (error) await sb().auth.signOut({ scope: 'local' })
 }
 
 /** Avisa quando a sessão termina fora do app (expirou, saiu em outra aba). */

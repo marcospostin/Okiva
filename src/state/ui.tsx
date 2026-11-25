@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { CategoryId } from '../types'
 
-export type View = 'home' | 'cards' | 'goals' | 'invoice' | 'assistant' | 'accounts'
+export type View = 'home' | 'cards' | 'goals' | 'invoice' | 'assistant' | 'accounts' | 'settings' | 'privacy' | 'terms' | 'reports'
 
 export type SheetState =
   /** Adicionar gasto ou receita */
@@ -24,7 +24,21 @@ export type SheetState =
   | { type: 'budget'; category?: CategoryId }
   | { type: 'cap' }
   | { type: 'balance' }
-  | { type: 'account' }
+  /** Relatórios: lançamentos que formam um valor (category = oferece "ver onde gastei") */
+  | { type: 'reportDetail'; title: string; subtitle?: string; ids: string[]; category?: CategoryId | null }
+  /** Tela Conta → sheets */
+  | { type: 'plan' }
+  | { type: 'security' }
+  | { type: 'changeEmail' }
+  | { type: 'changePassword' }
+  /** Senha nova depois do link "Esqueci minha senha" */
+  | { type: 'newPassword' }
+  | { type: 'notifications' }
+  | { type: 'help' }
+  | { type: 'bug' }
+  | { type: 'rate' }
+  /** Ações sem volta: senha + código no e-mail (confirmed = voltou pelo link do e-mail) */
+  | { type: 'verifyAction'; action: 'reset' | 'delete'; confirmed?: boolean }
   /** Name / e-mail of the account, and account deletion */
   | { type: 'profile' }
   /** One deposit of a goal: edit amount/date or delete */

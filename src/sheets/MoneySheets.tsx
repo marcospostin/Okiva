@@ -5,6 +5,7 @@
 import { useRef, useState } from 'react'
 import { BellRing, ChevronRight, Minus, Plus, Repeat } from 'lucide-react'
 import { categoryIds, categoryMeta, normalizeLabel } from '../data/categories'
+import { REPORTS_EVENT } from '../lib/reports'
 import { CategoryRowIcon } from '../components/icons'
 import { Chip, cx, Field, inputClass, MoneyInput, PrimaryButton, Sheet, Switch } from '../components/ui'
 import { brl, brlShort, longDate, monthKey, monthName, privateExpense, privateIncome, privateMoney } from '../lib/format'
@@ -1069,6 +1070,81 @@ export function CategorizeSheet({ close, id }: { close: () => void; id?: string 
         <PrimaryButton tone="dark" disabled={!!pending} onClick={() => setSkipped((s) => [...s, current.id])}>
           Pular por enquanto
         </PrimaryButton>
+      </div>
+    </Sheet>
+  )
+}
+
+/* ------------------------------------------------- Detalhe do relatório */
+
+/** Lista dos lançamentos que formam um valor do relatório (toque numa fatia, barra ou mês). */
+export function ReportDetailSheet({
+  close,
+  title,
+  subtitle,
+  ids,
+  category,
+}: {
+  close: () => void
+  title: string
+  subtitle?: string
+  ids: string[]
+  category?: CategoryId | null
+}) {
+  const { state } = useStore()
+  const { openSheet } = useUI()
+  const hidden = state.hideBalance
+  const today = todayISO()
+  const set = new Set(ids)
+  const txs = state.transactions.filter((t) => set.has(t.id)).sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0))
+  const [all, setAll] = useState(false)
+  const shown = all ? txs : txs.slice(0, 30)
+
+  return (
+    <Sheet title={title} onClose={close}>
+      <div className="flex flex-col gap-4">
+        {subtitle && <p className="-mt-3 font-sat text-[13px] text-esk-muted">{subtitle}</p>}
+        {category !== undefined && (
+          <button
+            type="button"
+            onClick={() => {
+              window.dispatchEvent(new CustomEvent(REPORTS_EVENT, { detail: { tab: 'onde', category } }))
+              close()
+            }}
+            className="flex items-center justify-between gap-3 rounded-[18px] bg-esk-elevated px-4 py-3 text-left font-sat text-[14px] font-medium text-esk-lime-soft ring-1 ring-esk-track hover:bg-[#1f1f23]"
+          >
+            Ver onde gastei nesta categoria
+            <ChevronRight size={16} aria-hidden />
+          </button>
+        )}
+        <ul className="flex flex-col rounded-[22px] bg-esk-elevated px-3">
+          {shown.map((t, i) => {
+            const k = kindOf(t)
+            return (
+              <li key={t.id}>
+                {i > 0 && <div className="h-px bg-esk-border" />}
+                <button type="button" onClick={() => openSheet({ type: 'tx', id: t.id })} className={cx('flex w-full items-center gap-3 py-3 text-left transition hover:opacity-80', t.date > today && 'opacity-60')}>
+                  <span className="w-[44px] shrink-0 font-sat text-[12px] text-esk-subtle">{t.date.slice(8, 10)}/{t.date.slice(5, 7)}</span>
+                  <span className="flex min-w-0 flex-1 flex-col">
+                    <span className="truncate font-sat text-[14px] font-medium text-white">{t.name}</span>
+                    <span className="truncate font-sat text-[11px] text-esk-subtle">
+                      {k === 'income' ? incomeLabel(t.category) : categoryMeta(state, t.category).label} · {methodLabel(state, t)}
+                      {t.installment ? ` · parcela ${t.installment.number}/${t.installment.total}` : ''}
+                    </span>
+                  </span>
+                  <span className={cx('shrink-0 font-sat text-[14px] font-medium', k === 'income' ? 'text-esk-positive' : 'text-esk-negative')}>
+                    {k === 'income' ? privateIncome(t.amount, hidden) : privateExpense(t.amount, hidden)}
+                  </span>
+                </button>
+              </li>
+            )
+          })}
+        </ul>
+        {txs.length > 30 && !all && (
+          <button type="button" onClick={() => setAll(true)} className="self-start font-sat text-[14px] font-medium text-esk-lime">
+            Ver todos ({txs.length})
+          </button>
+        )}
       </div>
     </Sheet>
   )

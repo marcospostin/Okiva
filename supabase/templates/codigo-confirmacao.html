@@ -1,0 +1,79 @@
+<!-- Okiva · código para confirmar ações importantes (Começar do zero, Excluir conta)
+     Assunto: Seu código do Okiva: {{ .Token }}
+     Onde colar: Supabase → Authentication → Emails → Templates → "Magic link" (o app usa o envio de código por e-mail)
+     Variáveis: {{ .Token }} (código), {{ .ConfirmationURL }} (link), {{ .Email }} -->
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="dark light" />
+    <title>Seu código do Okiva</title>
+  </head>
+  <body style="margin:0;padding:0;background-color:#0a0a0c;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#0a0a0c;">
+      <tr>
+        <td align="center" style="padding:40px 16px;">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:480px;background-color:#151518;border-radius:24px;">
+            <tr>
+              <td style="padding:36px 32px 8px 32px;font-family:Arial,Helvetica,sans-serif;">
+                <!-- Logo: símbolo ✦ (o mesmo do botão Assistente) + nome. PNG hospedado no site,
+                     porque Gmail/Outlook não exibem SVG nem imagens embutidas no e-mail. -->
+                <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                  <tr>
+                    <td valign="middle" style="padding-right:10px;line-height:0;">
+                      <img src="https://okiva.vercel.app/email/okiva-sparkles.png" width="26" height="26" alt="" style="display:block;border:0;outline:none;width:26px;height:26px;" />
+                    </td>
+                    <td valign="middle" style="font-family:Arial,Helvetica,sans-serif;font-size:26px;line-height:26px;font-weight:bold;letter-spacing:-0.6px;color:#e5ffb5;">
+                      Okiva
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:24px 32px 0 32px;font-family:Arial,Helvetica,sans-serif;">
+                <h1 style="margin:0;font-size:24px;line-height:1.25;font-weight:600;color:#ffffff;">Confirme que é você</h1>
+                <p style="margin:12px 0 0 0;font-size:15px;line-height:1.55;color:#9a9a9a;">
+                  Recebemos um pedido para apagar dados da sua conta no Okiva. Para continuar, digite este código no app:
+                </p>
+                <p style="margin:20px 0 0 0;font-family:'Courier New',monospace;font-size:32px;line-height:1;font-weight:bold;letter-spacing:8px;color:#e5ffb5;">{{ .Token }}</p>
+                <p style="margin:8px 0 0 0;font-size:13px;color:#85858a;">O código vale por 1 hora. Ou toque no botão abaixo.</p>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:28px 32px 0 32px;">
+                <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                  <tr>
+                    <td align="center" style="border-radius:18px;background-color:#e5ffb5;">
+                      <a href="{{ .ConfirmationURL }}" target="_blank"
+                         style="display:inline-block;padding:15px 28px;font-family:Arial,Helvetica,sans-serif;font-size:16px;font-weight:bold;color:#0a0a0a;text-decoration:none;border-radius:18px;">
+                        Abrir o Okiva e confirmar
+                      </a>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:28px 32px 0 32px;font-family:Arial,Helvetica,sans-serif;">
+                <p style="margin:0;font-size:13px;line-height:1.55;color:#85858a;">
+                  Se o botão não funcionar, copie e cole este link no navegador:<br />
+                  <a href="{{ .ConfirmationURL }}" target="_blank" style="color:#d8ccfa;word-break:break-all;">{{ .ConfirmationURL }}</a>
+                </p>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:28px 32px 36px 32px;font-family:Arial,Helvetica,sans-serif;">
+                <p style="margin:0;padding-top:20px;border-top:1px solid #26262a;font-size:12px;line-height:1.55;color:#85858a;">
+                  Você recebeu este e-mail porque {{ .Email }} pediu para apagar dados no Okiva.
+                  Se não foi você, ignore este e-mail e troque sua senha: nada será apagado sem este código.
+                </p>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>

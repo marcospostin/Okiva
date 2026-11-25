@@ -89,6 +89,7 @@ export const initialState: AppState = {
   customCategories: SUGGESTED_CATEGORIES,
   categoriesSeeded: true,
   categoryRules: [],
+  notificationPrefs: { invoice_due: true, cap_alert: true, uncategorized: true, recurrence: false, weekly_summary: false, news: false },
   deposits: EXAMPLE_DEPOSITS,
   invoices: [],
 }

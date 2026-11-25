@@ -1,6 +1,6 @@
 /**
  * Tipos do banco Supabase do Okiva (projeto nbevtdkdzxuebmhvypan).
- * Gerado com generate_typescript_types (Supabase MCP) em 2026-11-24 (etapa 8). NÃO editar à mão:
+ * Gerado com generate_typescript_types (Supabase MCP) em 2026-11-24 (etapa 9). NÃO editar à mão:
  * regenere após cada migration (`supabase gen types typescript --project-id nbevtdkdzxuebmhvypan`).
  * Colunas em snake_case; o front usa camelCase (ver docs/supabase.md, seção de mapeamento).
  */
@@ -384,6 +384,7 @@ export type Database = {
           hide_balance: boolean
           id: string
           name: string
+          notification_prefs: Json
           stage: number
           starting_balance: number
           updated_at: string
@@ -397,6 +398,7 @@ export type Database = {
           hide_balance?: boolean
           id: string
           name: string
+          notification_prefs?: Json
           stage?: number
           starting_balance?: number
           updated_at?: string
@@ -410,6 +412,7 @@ export type Database = {
           hide_balance?: boolean
           id?: string
           name?: string
+          notification_prefs?: Json
           stage?: number
           starting_balance?: number
           updated_at?: string
@@ -493,6 +496,50 @@ export type Database = {
           },
           {
             foreignKeyName: "recurrences_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      support_requests: {
+        Row: {
+          created_at: string
+          id: string
+          kind: string
+          message: string
+          meta: Json
+          rating: number | null
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          kind: string
+          message?: string
+          meta?: Json
+          rating?: number | null
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          kind?: string
+          message?: string
+          meta?: Json
+          rating?: number | null
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "support_requests_user_id_fkey"
             columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "profiles"
@@ -644,6 +691,7 @@ export type Database = {
       normalize_label: { Args: { p_label: string }; Returns: string }
       process_due: { Args: never; Returns: number }
       profile_exists: { Args: { p_user: string }; Returns: boolean }
+      recent_email_verification: { Args: { p_minutes?: number }; Returns: boolean }
       recategorize_transactions: {
         Args: { p_category: string | null; p_ids: string[] }
         Returns: number

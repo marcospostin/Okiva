@@ -20,6 +20,8 @@ import {
 } from '../state/store'
 import type { Transaction } from '../types'
 import { useUI } from '../state/ui'
+import { Donut } from '../components/charts'
+import { rememberReportsOpen, type ReportTab } from '../lib/reports'
 import { LockBadge, PlusHint, PLUS_PITCH } from '../components/PlusHint'
 
 const monthLabel = (key: string) => {
@@ -224,6 +226,7 @@ export default function Home() {
   const isCurrent = month === currentMonth()
   const isFuture = summary.future
   const available = state.budget.total - summary.total
+  const budgetUsed = pct(summary.total, state.budget.total)
   const variation = summary.previousTotal ? pct(summary.total - summary.previousTotal, summary.previousTotal) : null
   const txs = showAll ? summary.transactions : summary.transactions.slice(0, 6)
   const todayKey = toISO(TODAY)
@@ -262,6 +265,20 @@ export default function Home() {
     return segs
   }, [summary.byCategory, summary.uncategorized, restTiles, restAmount, state])
   const pendingCount = useMemo(() => uncategorized(state).length, [state])
+  // Prévia dos relatórios: mesmas fatias da barra do mês (com teto ou não), maiores primeiro
+  const reportSlices = useMemo(
+    () =>
+      [
+        ...summary.byCategory.map((c) => ({ key: c.category, value: c.amount, color: categoryMeta(state, c.category).color, label: categoryMeta(state, c.category).label })),
+        ...(summary.uncategorized > 0 ? [{ key: '__none', value: summary.uncategorized, color: UNCATEGORIZED.color, label: 'Sem categoria', hatched: true }] : []),
+      ].sort((a, b) => b.value - a.value),
+    [summary.byCategory, summary.uncategorized, state],
+  )
+  const reportTop = reportSlices.slice(0, 3)
+  const openReports = (tab: ReportTab) => {
+    rememberReportsOpen({ tab, month })
+    navigate('reports')
+  }
 
   // Fatura fica sempre visível; sem o Plus aparece bloqueada e o toque explica o recurso
   const [plusHint, setPlusHint] = useState(false)
@@ -290,7 +307,7 @@ export default function Home() {
         <header className="flex h-[48px] items-center gap-3 mt-8">
           <button
             type="button"
-            onClick={() => openSheet({ type: 'account' })}
+            onClick={() => navigate('settings')}
             className="shrink-0 rounded-full transition active:scale-95"
             aria-label="Abrir conta"
           >
@@ -422,57 +439,85 @@ export default function Home() {
                 />
               </div>
 
-              <div className="flex items-center justify-between gap-3 leading-[1.3] whitespace-nowrap">
-                <p className={cx('font-inter-m text-[36px] font-medium tracking-[-1.44px] lg:text-[44px] lg:tracking-[-1.9px]', isFuture ? 'text-esk-muted' : 'text-white')}>
-                  <CountUp value={summary.total} format={(n) => privateMoney(brl(n), hidden)} />
-                </p>
-                {isFuture && <p className="font-inter text-[11px] whitespace-normal text-right text-esk-muted">Já comprometido</p>}
-                {variation !== null && !isFuture && (
-                  <div className="flex flex-col items-end gap-px">
-                    <p className={cx('font-inter-m text-[12px] font-medium', variation <= 0 ? 'text-esk-lime' : 'text-white')}>
-                      {variation <= 0 ? `↘ ${Math.abs(variation)}% menos` : `↗ ${variation}% mais`}
-                    </p>
-                    <p className="font-inter text-[10px] text-esk-muted">que em {monthName(Number(previousMonth(month).slice(5, 7)) - 1)}</p>
-                  </div>
-                )}
-              </div>
+              {/* Gasto do mês e teto num card só: o total e o quanto dele já foi usado */}
+              <div className={cx('flex flex-col gap-4 rounded-[26px] bg-esk-surface px-5 pt-[18px] pb-5', isFuture && 'opacity-80')}>
+                <div className="flex items-center justify-between gap-3 leading-[1.3] whitespace-nowrap">
+                  <p className={cx('font-inter-m text-[36px] font-medium tracking-[-1.44px] lg:text-[44px] lg:tracking-[-1.9px]', isFuture ? 'text-esk-muted' : 'text-white')}>
+                    <CountUp value={summary.total} format={(n) => privateMoney(brl(n), hidden)} />
+                  </p>
+                  {isFuture && <p className="font-inter text-[11px] whitespace-normal text-right text-esk-muted">Já comprometido</p>}
+                  {variation !== null && !isFuture && (
+                    <div className="flex flex-col items-end gap-px">
+                      <p className={cx('font-inter-m text-[12px] font-medium', variation <= 0 ? 'text-esk-lime' : 'text-white')}>
+                        {variation <= 0 ? `↘ ${Math.abs(variation)}% menos` : `↗ ${variation}% mais`}
+                      </p>
+                      <p className="font-inter text-[10px] text-esk-muted">que em {monthName(Number(previousMonth(month).slice(5, 7)) - 1)}</p>
+                    </div>
+                  )}
+                </div>
 
-              {state.budget.total <= 0 ? (
-                <button
-                  type="button"
-                  onClick={() => openSheet({ type: 'budget' })}
-                  className="self-start font-inter-m text-[12px] leading-[1.3] font-medium text-esk-lime hover:underline"
-                >
-                  Definir limite de gasto do mês
-                </button>
-              ) : (
-              <div className="flex items-start justify-between leading-[1.3] whitespace-nowrap">
-                <p className={cx('font-inter-m text-[12px] font-medium', available >= 0 ? 'text-esk-lime' : 'text-white', isFuture && 'opacity-70')}>
-                  {available >= 0 ? `${privateMoney(brlShort(available), hidden)} ainda ${isFuture ? 'livres' : 'disponíveis'}` : `${privateMoney(brlShort(-available), hidden)} acima do teto`}
-                </p>
-                <p className="font-inter text-[11px] text-esk-muted">Teto de {privateMoney(brlShort(state.budget.total), hidden)}</p>
-              </div>
-              )}
-
-              <div className="flex h-[10px] gap-1 overflow-hidden rounded-[5px]" aria-hidden>
-                {barSegments.length === 0 ? (
-                  <div className="h-full flex-1 rounded-[3px] bg-esk-track" />
+                {state.budget.total <= 0 ? (
+                  <button
+                    type="button"
+                    onClick={() => openSheet({ type: 'budget' })}
+                    className="self-start font-inter-m text-[12px] leading-[1.3] font-medium text-esk-lime hover:underline"
+                  >
+                    Definir limite de gasto do mês
+                  </button>
                 ) : (
-                  barSegments.map((s) => (
-                    <div
-                      key={s.key}
-                      className={cx('h-full origin-left animate-[grow-x_600ms_cubic-bezier(0.2,0.8,0.2,1)_both] rounded-[3px] transition-[flex-grow] duration-500', isFuture && 'opacity-50')}
-                      style={{
-                        flexGrow: s.amount,
-                        backgroundColor: s.color,
-                        // Mês que ainda não chegou: listras, como algo previsto
-                        backgroundImage:
-                          isFuture || s.key === '__none' ? 'repeating-linear-gradient(135deg, rgba(0,0,0,0.35) 0 3px, transparent 3px 7px)' : undefined,
-                      }}
-                    />
-                  ))
+                  <button
+                    type="button"
+                    onClick={() => openSheet({ type: 'budget' })}
+                    aria-label={`Teto do mês: ${budgetUsed}% usado. Toque para ajustar.`}
+                    className="-mx-2 -mb-2 flex flex-col gap-[10px] rounded-[18px] px-2 pt-1 pb-2 text-left transition hover:bg-white/[0.03] active:scale-[0.99]"
+                  >
+                    <span className="block h-[8px] w-full overflow-hidden rounded-[4px] bg-esk-track">
+                      <span
+                        className={cx(
+                          'block h-full origin-left animate-[grow-x_700ms_cubic-bezier(0.2,0.8,0.2,1)_both] rounded-[4px] transition-[width] duration-700',
+                          available >= 0 ? 'bg-esk-lime' : 'bg-esk-lilac',
+                        )}
+                        style={{ width: `${Math.min(100, budgetUsed)}%` }}
+                      />
+                    </span>
+                    <span className="flex items-baseline justify-between gap-3 leading-[1.3] whitespace-nowrap">
+                      <span className={cx('font-inter-m text-[13px] font-medium', available >= 0 ? 'text-esk-lime' : 'text-esk-lilac')}>
+                        {available >= 0 ? `${privateMoney(brlShort(available), hidden)} ainda ${isFuture ? 'livres' : 'disponíveis'}` : `${privateMoney(brlShort(-available), hidden)} acima do teto`}
+                      </span>
+                      <span className="font-inter text-[11px] text-esk-muted">
+                        <span className="font-inter-m font-medium text-white">{budgetUsed}%</span> de {privateMoney(brlShort(state.budget.total), hidden)}
+                      </span>
+                    </span>
+                  </button>
                 )}
               </div>
+
+              {/* Distribuição por categoria: separada do teto, junto dos cards que ela resume */}
+              {barSegments.length > 0 && (
+                <div className="flex flex-col gap-[10px] pt-2">
+                  <div className="flex items-center justify-between leading-[1.3]">
+                    <p className="font-inter-m text-[11px] font-medium tracking-[1.1px] text-esk-muted">POR CATEGORIA</p>
+                    <button type="button" onClick={() => navigate('goals')} className="font-inter text-[11px] text-esk-muted hover:text-white">
+                      Tetos em Metas
+                    </button>
+                  </div>
+                  <div className="flex h-[6px] gap-1 overflow-hidden rounded-[3px]" aria-hidden>
+                    {barSegments.map((s) => (
+                      <div
+                        key={s.key}
+                        className={cx('h-full origin-left animate-[grow-x_600ms_cubic-bezier(0.2,0.8,0.2,1)_both] rounded-[3px] transition-[flex-grow] duration-500', isFuture && 'opacity-50')}
+                        style={{
+                          flexGrow: s.amount,
+                          backgroundColor: s.color,
+                          // Mês que ainda não chegou / sem categoria: listras
+                          backgroundImage:
+                            isFuture || s.key === '__none' ? 'repeating-linear-gradient(135deg, rgba(0,0,0,0.35) 0 3px, transparent 3px 7px)' : undefined,
+                        }}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {tiles.length > 0 && (
                 <CategoryTiles count={shownTiles.length + (overflow ? 1 : 0)}>
@@ -546,6 +591,63 @@ export default function Home() {
                   )}
                 </CategoryTiles>
               )}
+            </section>
+
+            {/* Relatórios: prévia do mês + atalhos para a tela completa */}
+            <section aria-label="Relatórios" className="flex flex-col gap-[14px]">
+              <div className="flex items-center justify-between leading-[1.4] whitespace-nowrap text-esk-muted">
+                <p className="font-inter-m text-[11px] font-medium tracking-[1.1px]">RELATÓRIOS</p>
+                <p className="font-inter text-[10px]">{monthLabel(month)}</p>
+              </div>
+              <div className="flex flex-col gap-4 rounded-[26px] bg-esk-surface p-4">
+                {reportSlices.length === 0 ? (
+                  <div className="flex flex-col gap-1 py-2">
+                    <p className="font-inter-m text-[14px] font-medium text-white">Seus gastos do mês aparecem aqui</p>
+                    <p className="font-inter text-[12px] text-esk-muted">Por categoria, por lugar e mês a mês, para ver para onde o dinheiro está indo.</p>
+                  </div>
+                ) : (
+                  <button type="button" onClick={() => openReports('categorias')} className="flex items-center gap-4 text-left" aria-label="Abrir relatório por categoria">
+                    <Donut
+                      slices={reportSlices}
+                      size={108}
+                      thickness={16}
+                      label="Gastos do mês por categoria"
+                      center={<span className="font-inter-m text-[12px] font-medium text-white">{privateMoney(brlShort(Math.round(summary.total)), hidden)}</span>}
+                    />
+                    <ul className="flex min-w-0 flex-1 flex-col gap-[6px]">
+                      {reportTop.map((c) => (
+                        <li key={c.key} className="flex items-center gap-2 font-inter text-[12px]">
+                          <span className="size-[8px] shrink-0 rounded-full" style={{ backgroundColor: c.color }} />
+                          <span className="min-w-0 flex-1 truncate text-white">{c.label}</span>
+                          <span className="shrink-0 text-esk-muted">{pct(c.value, summary.total)}%</span>
+                        </li>
+                      ))}
+                      {reportSlices.length > reportTop.length && (
+                        <li className="font-inter text-[11px] text-esk-subtle">+{reportSlices.length - reportTop.length} {reportSlices.length - reportTop.length === 1 ? 'categoria' : 'categorias'}</li>
+                      )}
+                    </ul>
+                  </button>
+                )}
+                <div className="grid grid-cols-3 gap-2">
+                  {([
+                    ['categorias', 'Categorias'],
+                    ['onde', 'Onde'],
+                    ['mes', 'Mês a mês'],
+                  ] as const).map(([tab, label]) => (
+                    <button
+                      key={tab}
+                      type="button"
+                      onClick={() => openReports(tab)}
+                      className="h-[36px] rounded-[14px] bg-esk-elevated font-inter-m text-[12px] font-medium text-white ring-1 ring-esk-track transition hover:bg-[#1f1f23] active:scale-[0.97]"
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                <button type="button" onClick={() => openReports('categorias')} className="flex items-center justify-end gap-1 self-end font-inter-m text-[12px] font-medium text-esk-lime">
+                  Ver relatório completo <ChevronRight size={14} aria-hidden />
+                </button>
+              </div>
             </section>
 
             <section aria-label="Transações" className="flex flex-col gap-[14px]">

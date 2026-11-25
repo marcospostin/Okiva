@@ -340,6 +340,16 @@
   }
 }
 
+/* Report month bars grow from the bottom. */
+@keyframes grow-y {
+  from {
+    transform: scaleY(0);
+  }
+  to {
+    transform: scaleY(1);
+  }
+}
+
 /* Loading placeholder with a moving highlight. Use together with `animate-shimmer`. */
 .skeleton-shimmer {
   background: linear-gradient(90deg, #1c1c1f 0%, #2a2a2f 50%, #1c1c1f 100%);
