@@ -2,7 +2,7 @@
  * Transferências ("Mover dinheiro") e ajustes ("Conferir saldo/fatura"): como aparecem nas listas.
  * Não são gasto nem receita, então ficam com cor neutra e fora de teto e relatórios.
  */
-import { accountLabel } from '../state/store'
+import { accountLabel, cardShort } from '../state/store'
 import type { AppState, Transaction } from '../types'
 import { brl, HIDDEN_MONEY } from './format'
 import { kindOf } from './ledger'
@@ -20,7 +20,7 @@ export function movementSubtitle(state: AppState, t: Transaction) {
   if (t.method.type === 'card') {
     const id = t.method.cardId
     const card = state.cards.find((c) => c.id === id)
-    return `Ajuste da fatura · ${card ? card.nickname : 'Cartão'}`
+    return `Ajuste da fatura · ${card ? cardShort(card) : 'Cartão'}`
   }
   return `Ajuste de saldo · ${accountLabel(state, t.accountId)}`
 }

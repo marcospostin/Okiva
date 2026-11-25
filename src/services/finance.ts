@@ -30,7 +30,7 @@ import { normalizeLabel } from '../data/categories'
 /* ------------------------------------------------------------------ DTOs */
 
 export type TransactionInput = Omit<Transaction, 'id'>
-export type CardInput = Pick<Card, 'nickname' | 'last4' | 'limit' | 'openingInvoice' | 'dueDay'> & { color?: Card['color'] }
+export type CardInput = Pick<Card, 'bank' | 'nickname' | 'last4' | 'limit' | 'openingInvoice' | 'dueDay'> & { color?: Card['color'] }
 export type GoalInput = Omit<Goal, 'id' | 'startedAt' | 'initialSaved' | 'deposited'> & { featured?: boolean }
 
 export interface ImportInvoiceInput {

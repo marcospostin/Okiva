@@ -81,14 +81,12 @@ export default function Accounts() {
                     </span>
                     <span className="flex min-w-0 flex-1 flex-col">
                       <span className="truncate font-sat text-[17px] font-medium text-white">{a.name}</span>
-                      {/* Tipo embaixo do nome, menos quando o nome já é o tipo ("Dinheiro em espécie") */}
-                      {(a.name !== accountKindLabel(a.kind) || subs.length > 0) && (
-                        <span className="font-sat text-[12px] text-esk-subtle">
-                          {[a.name !== accountKindLabel(a.kind) && accountKindLabel(a.kind), subs.length > 0 && `${subs.length} ${subs.length === 1 ? 'subconta' : 'subcontas'}`]
-                            .filter(Boolean)
-                            .join(' · ')}
-                        </span>
-                      )}
+                      {/* Banco em destaque; embaixo o apelido (ou o tipo, se não tiver apelido) */}
+                      <span className="font-sat text-[12px] text-esk-subtle">
+                        {[a.nickname || accountKindLabel(a.kind), subs.length > 0 && `${subs.length} ${subs.length === 1 ? 'subconta' : 'subcontas'}`]
+                          .filter(Boolean)
+                          .join(' · ')}
+                      </span>
                     </span>
                     <span className="shrink-0 font-sat text-[17px] font-medium text-white">{privateMoney(brl(accountTotal(state, a.id)), hidden)}</span>
                     <ChevronRight size={16} className="shrink-0 text-esk-subtle" aria-hidden />
@@ -124,7 +122,7 @@ export default function Accounts() {
               </span>
               <span className="flex flex-col">
                 <span className="font-sat text-[15px] font-medium text-white">Nova conta</span>
-                <span className="font-sat text-[12px] text-esk-subtle">Banco ou dinheiro em espécie. Poupança e caixinhas ficam dentro da conta.</span>
+                <span className="font-sat text-[12px] text-esk-subtle">Seu banco. Poupança e caixinhas ficam dentro da conta.</span>
               </span>
             </button>
           </section>
@@ -220,7 +218,7 @@ function AccountDetail({ account, onBack, onOpen }: { account: Account; onBack: 
         <div className="grid gap-x-12 md:grid-cols-2 md:pt-4 lg:gap-x-16">
           <section aria-label="Saldo" className="flex flex-col gap-[18px] pt-6">
             <div className="rounded-[34px] bg-esk-surface p-6 md:p-8">
-              <p className="font-sat text-[15px] font-medium text-esk-muted">{isSub ? `Subconta de ${main.name}` : subs.length ? 'Total com subcontas' : accountKindLabel(account.kind)}</p>
+              <p className="font-sat text-[15px] font-medium text-esk-muted">{isSub ? `Subconta de ${main.name}` : [account.nickname, subs.length ? 'total com subcontas' : accountKindLabel(account.kind)].filter(Boolean).join(' · ')}</p>
               <p className="pt-[6px] font-sat text-[38px] leading-[44px] font-medium tracking-[-1.71px] text-white">{privateMoney(brl(total), hidden)}</p>
               <p className="pt-2 font-sat text-[13px] text-esk-subtle">
                 {account.reconciledOn ? `Conferido com o banco em ${longDate(account.reconciledOn)}` : 'Ainda não conferido com o banco'}

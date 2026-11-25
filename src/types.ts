@@ -95,6 +95,9 @@ export type CardColor = 'gradient' | 'lilac' | 'offwhite'
 
 export interface Card {
   id: string
+  /** Banco do cartão ("Nubank"). Cartões antigos podem não ter: vale o nickname. */
+  bank?: string
+  /** Apelido. Sem apelido, igual ao banco. */
   nickname: string
   last4: string
   color: CardColor
@@ -167,6 +170,8 @@ export interface Account {
   name: string
   kind: AccountKind
   startingBalance: number
+  /** Apelido opcional ("Dia a dia"). `name` é o banco. Subconta não usa. */
+  nickname?: string
   /** Subconta (poupança, caixinha… nome livre) desta conta. Um nível só. */
   parentId?: string
   /** Última conferência com o banco (yyyy-mm-dd) e o saldo informado nela */

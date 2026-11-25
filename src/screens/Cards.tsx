@@ -3,7 +3,7 @@ import { Asset } from '../components/icons'
 import { EmptyState, LinkButton, ListPanel, ListRow, Page, PrimaryButton, ProgressBar, RoundButton, ScreenHeader, SectionHeader } from '../components/ui'
 import { brlShort, longDate, pct, privateMoney } from '../lib/format'
 import { cardsApi } from '../services/finance'
-import { daysUntilDue, todayISO, useStore } from '../state/store'
+import { cardShort, daysUntilDue, todayISO, useStore } from '../state/store'
 import { useUI } from '../state/ui'
 import type { Card } from '../types'
 
@@ -71,7 +71,7 @@ export default function Cards() {
                     // Order is a preference: saved in the background, never blocks the tap
                     cardsApi.reorder([front, ...state.cardOrder.slice(0, -1)]).catch(() => undefined)
                   }}
-                  aria-label={`Cartão da frente: ${front.nickname}. Toque para trocar.`}
+                  aria-label={`Cartão da frente: ${cardShort(front)}. Toque para trocar.`}
                   className="relative block w-full text-left transition-transform duration-200 active:scale-[0.985]"
                   style={{ height: CARD_H + (ordered.length - 1) * OFFSET }}
                 >
@@ -84,7 +84,7 @@ export default function Cards() {
                         style={{ top: i * OFFSET, height: CARD_H, backgroundImage: CARD_BG[STACK_COLORS[(ordered.length - 1 - i) % STACK_COLORS.length]], zIndex: i }}
                       >
                         <div className="flex items-start justify-between font-sat text-[15px] font-medium">
-                          <span>{c.nickname}</span>
+                          <span>{cardShort(c)}</span>
                           <span>•• {c.last4}</span>
                         </div>
                         {isFront && (
@@ -117,11 +117,11 @@ export default function Cards() {
                 </p>
                 <div className="flex flex-col gap-3 pt-4">
                   <PrimaryButton onClick={() => openSheet({ type: 'payInvoice', cardId: front.id })} disabled={front.invoice <= 0}>
-                    {front.invoice > 0 ? `Pagar fatura ${front.nickname}` : 'Fatura paga'}
+                    {front.invoice > 0 ? `Pagar fatura ${cardShort(front)}` : 'Fatura paga'}
                   </PrimaryButton>
                   <p className="font-sat text-[12px] text-esk-subtle">Os gastos no cartão saem do saldo quando você paga a fatura.</p>
                   <div className="flex flex-wrap gap-x-5 gap-y-2">
-                    <LinkButton onClick={() => openSheet({ type: 'card', id: front.id })}>Editar {front.nickname}</LinkButton>
+                    <LinkButton onClick={() => openSheet({ type: 'card', id: front.id })}>Editar {cardShort(front)}</LinkButton>
                     <LinkButton onClick={() => openSheet({ type: 'reconcile', cardId: front.id })}>Conferir fatura</LinkButton>
                     <LinkButton onClick={() => openSheet({ type: 'ongoing', cardId: front.id })}>Compra parcelada de antes do Okiva</LinkButton>
                   </div>
@@ -140,7 +140,7 @@ export default function Cards() {
                       index={i}
                       onClick={() => openSheet({ type: 'card', id: c.id })}
                       icon={<Asset name="04670.svg" size={20} />}
-                      title={c.nickname}
+                      title={cardShort(c)}
                       subtitle={dueLabel(d)}
                       value={privateMoney(brlShort(c.invoice), hidden)}
                     />
@@ -171,7 +171,7 @@ export default function Cards() {
                     onClick={() => openSheet({ type: 'invoiceImport', id: inv.id })}
                     icon={<FileText size={19} strokeWidth={1.6} className="text-esk-text-2" aria-hidden />}
                     title={inv.fileName}
-                    subtitle={`${card ? card.nickname : 'Sem cartão'} · ${longDate(inv.importedAt)} · ${count} ${count === 1 ? 'lançamento' : 'lançamentos'}`}
+                    subtitle={`${card ? cardShort(card) : 'Sem cartão'} · ${longDate(inv.importedAt)} · ${count} ${count === 1 ? 'lançamento' : 'lançamentos'}`}
                     value={privateMoney(brlShort(inv.total), hidden)}
                   />
                 )

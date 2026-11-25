@@ -22,6 +22,7 @@ export type Database = {
     Tables: {
       accounts: {
         Row: {
+          nickname: string | null
           parent_id: string | null
           reconciled_balance: number | null
           reconciled_on: string | null
@@ -35,6 +36,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          nickname?: string | null
           parent_id?: string | null
           reconciled_balance?: number | null
           reconciled_on?: string | null
@@ -48,6 +50,7 @@ export type Database = {
           user_id?: string
         }
         Update: {
+          nickname?: string | null
           parent_id?: string | null
           reconciled_balance?: number | null
           reconciled_on?: string | null
@@ -110,6 +113,7 @@ export type Database = {
       }
       cards: {
         Row: {
+          bank: string | null
           reconciled_balance: number | null
           reconciled_on: string | null
           opening_invoice: number
@@ -127,6 +131,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          bank?: string | null
           reconciled_balance?: number | null
           reconciled_on?: string | null
           opening_invoice?: number
@@ -144,6 +149,7 @@ export type Database = {
           user_id?: string
         }
         Update: {
+          bank?: string | null
           reconciled_balance?: number | null
           reconciled_on?: string | null
           opening_invoice?: number

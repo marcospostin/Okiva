@@ -4,7 +4,9 @@ import { chipTextWidth, CHIP, fitChips, suggestCategories } from '../lib/categor
 import { ChevronRight, FileText, MessageCircle, Plus, Sparkles } from 'lucide-react'
 import { Chip, cx, Field, inputClass, MoneyInput, PrimaryButton, Sheet, Switch } from '../components/ui'
 import { brl, brlShort, longDate, pct, privateExpense, privateMoney } from '../lib/format'
-import { balanceOf, currentMonth, todayISO, useStore } from '../state/store'
+import { balanceOf, cardLabel, cardName, cardNickname, cardShort, currentMonth, todayISO, useStore } from '../state/store'
+import { BankSuggestions } from '../components/BankSuggestions'
+import { BANK_LIST_ID } from '../data/banks'
 import { accountApi, budgetApi, cardsApi, categoriesApi, goalsApi, invoicesApi, rulesApi } from '../services/finance'
 import { useMutation } from '../state/useMutation'
 import { useUI, type SheetState, type View } from '../state/ui'
@@ -109,7 +111,9 @@ function CardSheet({ close, id }: { close: () => void; id?: string }) {
   const { openSheet } = useUI()
   const { run, pending } = useMutation()
   const card = useLast(id ? state.cards.find((c) => c.id === id) : undefined)
-  const [nickname, setNickname] = useState(card?.nickname ?? '')
+  // Banco em destaque; apelido opcional (cartões antigos: o apelido era o nome todo)
+  const [bank, setBank] = useState(card ? cardName(card) : '')
+  const [nickname, setNickname] = useState(card ? (cardNickname(card) ?? '') : '')
   const [last4, setLast4] = useState(card?.last4 ?? '')
   const [limit, setLimit] = useState(card?.limit ?? 0)
   // Dados antigos (antes da fatura inicial) não têm openingInvoice: vale a fatura de então
@@ -123,7 +127,7 @@ function CardSheet({ close, id }: { close: () => void; id?: string }) {
   const [tries, setTries] = useState(0)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const errors = {
-    nickname: !nickname.trim() ? 'Dê um apelido ao cartão.' : undefined,
+    bank: !bank.trim() ? 'Informe o banco do cartão.' : undefined,
     last4: !/^\d{4}$/.test(last4) ? 'Use os 4 últimos dígitos.' : undefined,
     limit: limit <= 0 ? 'Informe o limite.' : undefined,
     dueDay: !(Number(dueDay) >= 1 && Number(dueDay) <= 31) ? 'Dia entre 1 e 31.' : undefined,
@@ -134,7 +138,7 @@ function CardSheet({ close, id }: { close: () => void; id?: string }) {
   async function save() {
     setTries((n) => n + 1)
     if (!valid) return
-    const input = { nickname: nickname.trim(), last4, limit, openingInvoice: opening, dueDay: Number(dueDay) }
+    const input = { bank: bank.trim(), nickname: nickname.trim() || bank.trim(), last4, limit, openingInvoice: opening, dueDay: Number(dueDay) }
     if (card) {
       const ok = await run('save', () => cardsApi.update({ ...card, ...input, invoice: projected }), (saved) => dispatch({ type: 'saveCard', card: saved }), 'Cartão atualizado')
       if (ok) close()
@@ -173,16 +177,20 @@ function CardSheet({ close, id }: { close: () => void; id?: string }) {
   }
 
   return (
-    <Sheet title={card ? card.nickname : 'Novo cartão'} onClose={close}>
+    <Sheet title={card ? cardShort(card) : 'Novo cartão'} onClose={close}>
       <form className="flex flex-col gap-5" onSubmit={(e) => { e.preventDefault(); save() }}>
         <div className="grid grid-cols-[minmax(0,1fr)_120px] gap-3">
-          <Field label="Apelido" htmlFor="nick" error={show(errors.nickname)} attempt={tries}>
-            <input id="nick" className={inputClass} placeholder="Principal" value={nickname} onChange={(e) => setNickname(e.target.value)} maxLength={20} />
+          <Field label="Banco" htmlFor="bank" error={show(errors.bank)} attempt={tries}>
+            <input id="bank" list={BANK_LIST_ID} autoComplete="off" className={inputClass} placeholder="Nubank, Itaú…" value={bank} onChange={(e) => setBank(e.target.value)} maxLength={30} />
+            <BankSuggestions />
           </Field>
           <Field label="Final" htmlFor="last4" error={show(errors.last4)} attempt={tries}>
             <input id="last4" inputMode="numeric" className={inputClass} placeholder="4552" value={last4} onChange={(e) => setLast4(e.target.value.replace(/\D/g, '').slice(0, 4))} />
           </Field>
         </div>
+        <Field label="Apelido (opcional)" htmlFor="nick">
+          <input id="nick" className={inputClass} placeholder="Dia a dia, Viagens, Empresa…" value={nickname} onChange={(e) => setNickname(e.target.value)} maxLength={30} />
+        </Field>
         <Field label="Limite" htmlFor="limit" error={show(errors.limit)} attempt={tries}>
           <MoneyInput id="limit" value={limit} onChange={setLimit} />
         </Field>
@@ -996,7 +1004,7 @@ function InvoiceImportSheet({ close, id }: { close: () => void; id: string }) {
         <DetailRows
           rows={[
             ['Arquivo', inv.fileName],
-            ['Cartão', card ? `${card.nickname} • ${card.last4}` : 'Sem cartão (Dinheiro)'],
+            ['Cartão', card ? cardLabel(card) : 'Sem cartão (Dinheiro)'],
             ['Importada em', longDate(inv.importedAt)],
             ['Total da fatura', privateMoney(brl(inv.total), hidden)],
             ['Lançamentos', `${txs.length} · ${privateMoney(brl(sum), hidden)}`],
@@ -1033,7 +1041,7 @@ function InvoiceImportSheet({ close, id }: { close: () => void; id: string }) {
           onOpen={() => setConfirm(true)}
           onCancel={() => setConfirm(false)}
           label="Desfazer importação"
-          question={`Apagar ${plural(txs.length, 'lançamento', 'lançamentos')} desta fatura?${restores ? ` A fatura do ${card!.nickname} volta para ${privateMoney(brl(inv.previousInvoice!), hidden)}.` : ''}`}
+          question={`Apagar ${plural(txs.length, 'lançamento', 'lançamentos')} desta fatura?${restores ? ` A fatura do ${cardShort(card!)} volta para ${privateMoney(brl(inv.previousInvoice!), hidden)}.` : ''}`}
           loading={pending === 'delete'}
           onConfirm={async () => {
             if (await run('delete', () => invoicesApi.remove(inv.id), () => dispatch({ type: 'undoInvoice', id: inv.id }), 'Importação desfeita', 'Não deu para desfazer. Tente de novo.')) close()

@@ -8,7 +8,7 @@ import { brl, brlShort, monthKey, privateMoney } from '../lib/format'
 import { readInvoice, withInstallments, type InvoiceResult } from '../services/ai'
 import { installmentsApi, invoicesApi, type AccountSnapshot } from '../services/finance'
 import { errorMessage } from '../services/http'
-import { currentMonth, ruleFor, todayISO, useStore } from '../state/store'
+import { cardLabel, currentMonth, ruleFor, todayISO, useStore } from '../state/store'
 import { useMutation } from '../state/useMutation'
 import { useUI } from '../state/ui'
 
@@ -279,7 +279,7 @@ export default function Invoice() {
                   <div className="flex flex-wrap gap-2" role="group" aria-label="Cartão da fatura">
                     {state.cards.map((c) => (
                       <Chip key={c.id} active={cardId === c.id} onClick={() => setCardId(c.id)}>
-                        {c.nickname} •• {c.last4}
+                        {cardLabel(c)}
                       </Chip>
                     ))}
                   </div>

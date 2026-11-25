@@ -23,7 +23,7 @@ import {
   type SourceFilter,
   type Span,
 } from '../lib/reports'
-import { currentMonth, useStore } from '../state/store'
+import { cardShort, currentMonth, useStore } from '../state/store'
 import { useUI } from '../state/ui'
 import type { CategoryId } from '../types'
 
@@ -77,7 +77,7 @@ export default function Reports() {
 
   const sources: { id: SourceFilter; label: string }[] = [
     { id: 'all', label: 'Tudo' },
-    ...state.cards.map((c) => ({ id: `card:${c.id}` as SourceFilter, label: c.nickname })),
+    ...state.cards.map((c) => ({ id: `card:${c.id}` as SourceFilter, label: cardShort(c) })),
     ...(state.accounts.length > 1 ? state.accounts.map((a) => ({ id: `acc:${a.id}` as SourceFilter, label: a.name })) : []),
   ]
 

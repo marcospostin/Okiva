@@ -503,13 +503,23 @@ export function accountName(state: AppState, id?: string) {
   return state.accounts.find((a) => a.id === id)?.name ?? state.accounts[0]?.name ?? 'Conta'
 }
 
-/** "Nubank · Caixinha 01" para subconta; o nome sozinho para conta principal. */
+/** "Nubank · Dia a dia" (conta com apelido), "Nubank · Caixinha 01" (subconta) ou só o banco. */
 export function accountLabel(state: AppState, id?: string) {
   const a = state.accounts.find((x) => x.id === id)
   if (!a) return accountName(state, id)
   const parent = a.parentId ? state.accounts.find((x) => x.id === a.parentId) : undefined
-  return parent ? `${parent.name} · ${a.name}` : a.name
+  if (parent) return `${parent.name} · ${a.name}`
+  return a.nickname ? `${a.name} · ${a.nickname}` : a.name
 }
+
+/** Banco do cartão (cartões antigos sem banco: o apelido). */
+export const cardName = (c: Pick<Card, 'bank' | 'nickname'>) => c.bank?.trim() || c.nickname
+/** Apelido, quando é diferente do banco. */
+export const cardNickname = (c: Pick<Card, 'bank' | 'nickname'>) => (c.bank && c.nickname && c.nickname !== c.bank ? c.nickname : undefined)
+/** "Nubank · Viagens" (para escolher entre cartões do mesmo banco). */
+export const cardShort = (c: Pick<Card, 'bank' | 'nickname'>) => (cardNickname(c) ? `${cardName(c)} · ${cardNickname(c)}` : cardName(c))
+/** "Nubank · Viagens •• 4552" */
+export const cardLabel = (c: Pick<Card, 'bank' | 'nickname' | 'last4'>) => `${cardShort(c)} •• ${c.last4}`
 
 export interface MonthSummary {
   key: string
@@ -639,7 +649,7 @@ export function methodLabel(state: AppState, t: Pick<Transaction, 'method' | 'ki
   if (t.method.type === 'cash') return 'Dinheiro'
   const id = t.method.cardId
   const card = state.cards.find((c) => c.id === id)
-  return card ? `${card.nickname} • ${card.last4}` : 'Cartão'
+  return card ? cardLabel(card) : 'Cartão'
 }
 
 export type { Budget }

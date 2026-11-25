@@ -3,7 +3,7 @@
 -- =============================================================================
 -- Lucas: renda de R$ 7.000, teto de R$ 7.000, gasta ~R$ 4.800/mês e guarda o resto.
 -- Mostra tudo o que o app faz, já preenchido:
---   contas e subcontas    Nubank (+ "Reserva de emergência", "Caixinha viagem" e "Caixinha imóvel") e Dinheiro em espécie
+--   contas e subcontas    Nubank "Dia a dia" (+ "Reserva de emergência", "Caixinha viagem" e "Caixinha imóvel")
 --   cartões               Nubank, Inter e XP; faturas pagas todo mês; fatura do mês aberta
 --   recorrências          salário, aluguel R$ 1.700, plano de saúde, internet, academia, streaming
 --   compras parceladas    Notebook 10× e passagem aérea 6× (parcelas futuras já lançadas)
@@ -26,7 +26,7 @@ declare
   v_month date := date_trunc('month', current_date)::date;
   v_today date := current_date;
   v_start date := (date_trunc('month', current_date) - interval '3 months')::date;
-  v_acc uuid; v_reserva uuid; v_viagem uuid; v_casa uuid; v_carteira uuid;
+  v_acc uuid; v_reserva uuid; v_viagem uuid; v_casa uuid;
   v_nu uuid; v_inter uuid; v_xp uuid;
   v_imovel uuid; v_portugal uuid; v_ingles uuid;
   v_rec uuid; v_inv uuid; v_group uuid;
@@ -49,19 +49,18 @@ begin
   perform public.seed_default_categories(v_uid);
 
   -- ------------------------------------------------------------ contas e subcontas
-  insert into public.accounts (user_id, name, kind, starting_balance) values (v_uid, 'Nubank', 'checking', 1500) returning id into v_acc;
+  insert into public.accounts (user_id, name, nickname, kind, starting_balance) values (v_uid, 'Nubank', 'Dia a dia', 'checking', 1500) returning id into v_acc;
   insert into public.accounts (user_id, name, kind, starting_balance, parent_id) values (v_uid, 'Reserva de emergência', 'savings', 0, v_acc) returning id into v_reserva;
   insert into public.accounts (user_id, name, kind, starting_balance, parent_id) values (v_uid, 'Caixinha viagem', 'savings', 0, v_acc) returning id into v_viagem;
   insert into public.accounts (user_id, name, kind, starting_balance, parent_id) values (v_uid, 'Caixinha imóvel', 'savings', 0, v_acc) returning id into v_casa;
-  insert into public.accounts (user_id, name, kind, starting_balance) values (v_uid, 'Dinheiro em espécie', 'wallet', 0) returning id into v_carteira;
 
   -- ------------------------------------------------------------ cartões (no Okiva há 4 meses)
-  insert into public.cards (user_id, nickname, last4, color, opening_invoice, "limit", due_day, position, started_on)
-  values (v_uid, 'XP', '1180', 'offwhite', 0, 12000, 5, 1, v_start) returning id into v_xp;
-  insert into public.cards (user_id, nickname, last4, color, opening_invoice, "limit", due_day, position, started_on)
-  values (v_uid, 'Inter', '6917', 'lilac', 0, 5000, 15, 2, v_start) returning id into v_inter;
-  insert into public.cards (user_id, nickname, last4, color, opening_invoice, "limit", due_day, position, started_on)
-  values (v_uid, 'Nubank', '4552', 'gradient', 0, 8000, 10, 3, v_start) returning id into v_nu;
+  insert into public.cards (user_id, bank, nickname, last4, color, opening_invoice, "limit", due_day, position, started_on)
+  values (v_uid, 'XP', 'Viagens', '1180', 'offwhite', 0, 12000, 5, 1, v_start) returning id into v_xp;
+  insert into public.cards (user_id, bank, nickname, last4, color, opening_invoice, "limit", due_day, position, started_on)
+  values (v_uid, 'Inter', 'Inter', '6917', 'lilac', 0, 5000, 15, 2, v_start) returning id into v_inter;
+  insert into public.cards (user_id, bank, nickname, last4, color, opening_invoice, "limit", due_day, position, started_on)
+  values (v_uid, 'Nubank', 'Nubank', '4552', 'gradient', 0, 8000, 10, 3, v_start) returning id into v_nu;
 
   -- As faturas são recalculadas no fim, de uma vez
   perform set_config('okiva.skip_invoice_sync', 'on', true);
@@ -72,8 +71,8 @@ begin
       select * from (values
         ('Mercado', 'alimentacao', 'nu', 3, 212.40), ('Mercado', 'alimentacao', 'nu', 11, 186.90),
         ('Mercado', 'alimentacao', 'nu', 19, 238.70), ('Mercado', 'alimentacao', 'nu', 26, 164.30),
-        ('Padaria', 'alimentacao', 'cash', 7, 38.50), ('Feira livre', 'alimentacao', 'cash', 14, 56.00),
-        ('Pastelaria', 'alimentacao', 'cash', 21, 24.00), ('Barbearia', 'outros', 'cash', 25, 50.00),
+        ('Padaria', 'alimentacao', 'pix', 7, 38.50), ('Feira livre', 'alimentacao', 'pix', 14, 56.00),
+        ('Pastelaria', 'alimentacao', 'pix', 21, 24.00), ('Barbearia', 'outros', 'pix', 25, 50.00),
         ('iFood', 'alimentacao', 'inter', 6, 62.90), ('iFood', 'alimentacao', 'inter', 14, 48.50),
         ('iFood', 'alimentacao', 'inter', 23, 74.80), ('Restaurante', 'alimentacao', 'nu', 17, 146.00),
         ('Uber', 'transporte', 'inter', 4, 27.90), ('Uber', 'transporte', 'inter', 12, 34.60),
@@ -89,9 +88,9 @@ begin
       v_amt := round(r.base * (1 + (((k * 7 + r.day * 3) % 9) - 4) / 40.0), 2);
       insert into public.transactions (user_id, name, category, method_type, card_id, account_id, date, amount, source, kind)
       values (v_uid, r.name, r.cat,
-              (case when r.pay in ('nu', 'inter', 'xp') then 'card' when r.pay = 'cash' then 'cash' else 'pix' end)::public.payment_method,
+              (case when r.pay in ('nu', 'inter', 'xp') then 'card' else 'pix' end)::public.payment_method,
               case r.pay when 'nu' then v_nu when 'inter' then v_inter when 'xp' then v_xp end,
-              case when r.pay = 'cash' then v_carteira when r.pay = 'pix' then v_acc end,
+              case when r.pay = 'pix' then v_acc end,
               d, v_amt, 'manual', 'expense');
     end loop;
   end loop;
@@ -181,7 +180,7 @@ begin
      and date_trunc('month', t.date) = v_month - interval '1 month';
 
   -- ------------------------------------------------------------ faturas pagas no vencimento (mês seguinte)
-  for c in select id, nickname, due_day from public.cards where user_id = v_uid loop
+  for c in select id, coalesce(bank, nickname) as nickname, due_day from public.cards where user_id = v_uid loop
     for k in 1..3 loop
       select coalesce(sum(t.amount), 0) into v_total from public.transactions t
        where t.user_id = v_uid and t.card_id = c.id and t.kind = 'expense'
@@ -202,7 +201,7 @@ begin
             where t.card_id = cd.id and not t.already_in_invoice), 0))
    where cd.user_id = v_uid;
 
-  -- ------------------------------------------------------------ saldos das subcontas e da carteira
+  -- ------------------------------------------------------------ saldos das subcontas
   -- (o Nubank começa com R$ 1.500; os outros terminam nos valores abaixo)
   update public.accounts a
      set starting_balance = x.target - coalesce((
@@ -217,7 +216,7 @@ begin
                       end)
              from public.transactions t
             where t.user_id = v_uid and t.date <= v_today and (t.account_id = a.id or t.transfer_account_id = a.id)), 0)
-    from (values (v_reserva, 24180.00), (v_viagem, 2350.00), (v_casa, 56000.00), (v_carteira, 85.00)) as x(id, target)
+    from (values (v_reserva, 24180.00), (v_viagem, 2350.00), (v_casa, 56000.00)) as x(id, target)
    where a.id = x.id;
 
   -- Conferências com o banco

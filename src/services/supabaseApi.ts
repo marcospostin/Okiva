@@ -105,6 +105,7 @@ const toAccount = (r: Row<'accounts'>): Account => ({
   name: r.name,
   kind: r.kind,
   startingBalance: num(r.starting_balance),
+  nickname: r.nickname ?? undefined,
   parentId: r.parent_id ?? undefined,
   reconciledOn: r.reconciled_on ?? undefined,
   reconciledBalance: r.reconciled_balance === null ? undefined : num(r.reconciled_balance),
@@ -140,6 +141,7 @@ const fromRecurrence = (r: RecurrenceInput) => ({
 export const toCard = (r: Row<'cards'>): Card => ({
   id: r.id,
   nickname: r.nickname,
+  bank: r.bank ?? undefined,
   last4: r.last4,
   color: r.color,
   invoice: num(r.invoice),
@@ -359,7 +361,7 @@ export const sbCardsApi = {
       await run(
         sb()
           .from('cards')
-          .insert({ nickname: input.nickname, last4: input.last4, limit: input.limit, opening_invoice: input.openingInvoice, due_day: input.dueDay, color: input.color ?? 'gradient' })
+          .insert({ bank: input.bank ?? null, nickname: input.nickname, last4: input.last4, limit: input.limit, opening_invoice: input.openingInvoice, due_day: input.dueDay, color: input.color ?? 'gradient' })
           .select()
           .single(),
       ),
@@ -371,6 +373,7 @@ export const sbCardsApi = {
           .from('cards')
           // A fatura em si não vai: o banco a desloca pela diferença da fatura inicial
           .update({
+            bank: card.bank ?? null,
             nickname: card.nickname,
             last4: card.last4,
             limit: card.limit,
@@ -496,7 +499,7 @@ export const sbAccountsApi = {
       await run(
         sb()
           .from('accounts')
-          .insert({ name: input.name, kind: input.kind, starting_balance: input.startingBalance, parent_id: input.parentId ?? null })
+          .insert({ name: input.name, nickname: input.nickname ?? null, kind: input.kind, starting_balance: input.startingBalance, parent_id: input.parentId ?? null })
           .select()
           .single(),
       ),
@@ -508,6 +511,7 @@ export const sbAccountsApi = {
           .from('accounts')
           .update({
             name: a.name,
+            nickname: a.nickname ?? null,
             kind: a.kind,
             starting_balance: a.startingBalance,
             reconciled_on: a.reconciledOn ?? null,

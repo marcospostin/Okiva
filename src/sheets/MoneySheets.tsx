@@ -9,6 +9,8 @@ import { REPORTS_EVENT } from '../lib/reports'
 import { CategoryRowIcon } from '../components/icons'
 import { Chip, cx, Field, inputClass, MoneyInput, PrimaryButton, SearchField, SearchSummary, Sheet, Switch } from '../components/ui'
 import { searchTransactions } from '../lib/search'
+import { BankSuggestions } from '../components/BankSuggestions'
+import { BANK_LIST_ID } from '../data/banks'
 import { movementAmount } from '../lib/movements'
 import { brl, brlShort, longDate, monthKey, monthName, privateExpense, privateIncome, privateMoney } from '../lib/format'
 import {
@@ -23,7 +25,7 @@ import {
   nextDate,
   splitInstallments,
 } from '../lib/ledger'
-import { accountBalance, accountLabel, accountName, capAlert, subaccounts, topAccounts, capWarning, methodLabel, ruleFor, todayISO, uncategorized, useStore } from '../state/store'
+import { accountBalance, accountLabel, accountName, capAlert, cardLabel, cardShort, subaccounts, topAccounts, capWarning, methodLabel, ruleFor, todayISO, uncategorized, useStore } from '../state/store'
 import { accountsApi, budgetApi, cardsApi, categoriesApi, installmentsApi, recurrencesApi, rulesApi, transactionsApi } from '../services/finance'
 import { useMutation } from '../state/useMutation'
 import { useUI } from '../state/ui'
@@ -360,7 +362,7 @@ export function EntrySheet({ close, id, initialKind }: { close: () => void; id?:
               <div className="flex flex-wrap gap-2">
                 {state.cards.map((c) => (
                   <Chip key={c.id} active={method === `card:${c.id}`} onClick={() => setMethod(`card:${c.id}`)}>
-                    {c.nickname}
+                    {cardShort(c)}
                   </Chip>
                 ))}
                 <Chip active={method === 'pix'} onClick={() => setMethod('pix')}>
@@ -489,14 +491,14 @@ export function TransactionSheet({ close, id }: { close: () => void; id: string 
     rows.push(['De', accountLabel(state, t.accountId)], ['Para', accountLabel(state, t.transferAccountId)])
   } else if (k === 'adjustment') {
     rows.push(
-      [card ? 'Cartão' : 'Conta', card ? `${card.nickname} • ${card.last4}` : accountLabel(state, t.accountId)],
+      [card ? 'Cartão' : 'Conta', card ? cardLabel(card) : accountLabel(state, t.accountId)],
       ['Motivo', 'Conferência com o banco'],
       ['Conta no mês?', 'Não: só corrige o valor'],
     )
   } else if (k === 'income') {
     rows.push(['Origem', incomeLabel(t.category)], ['Recebido em', accountName(state, t.accountId)])
   } else if (k === 'invoice_payment') {
-    rows.push(['Cartão', card ? `${card.nickname} • ${card.last4}` : 'Cartão removido'], ['Pago com', accountName(state, t.accountId)])
+    rows.push(['Cartão', card ? cardLabel(card) : 'Cartão removido'], ['Pago com', accountName(state, t.accountId)])
   } else {
     rows.push(['Categoria', categoryMeta(state, t.category).label], ['Pagamento', methodLabel(state, t)])
     if (t.method.type !== 'card' && state.accounts.length > 1) rows.push(['Conta', accountName(state, t.accountId)])
@@ -668,7 +670,7 @@ export function PayInvoiceSheet({ close, cardId, id }: { close: () => void; card
     if (amount <= 0 || !date || date > today || !card) return
     const tx: Omit<Transaction, 'id'> = {
       kind: 'invoice_payment',
-      name: `Fatura ${current?.nickname ?? ''}`.trim(),
+      name: `Fatura ${current ? cardShort(current) : ''}`.trim(),
       category: 'outros',
       method: { type: 'card', cardId: card },
       accountId: accountId || undefined,
@@ -683,14 +685,14 @@ export function PayInvoiceSheet({ close, cardId, id }: { close: () => void; card
   }
 
   return (
-    <Sheet title={existing ? 'Pagamento de fatura' : `Pagar fatura${current ? ` ${current.nickname}` : ''}`} onClose={close}>
+    <Sheet title={existing ? 'Pagamento de fatura' : `Pagar fatura${current ? ` ${cardShort(current)}` : ''}`} onClose={close}>
       <form className="flex flex-col gap-5" onSubmit={(e) => { e.preventDefault(); save() }}>
         {state.cards.length > 1 && (
           <Field label="Cartão">
             <div className="flex flex-wrap gap-2">
               {state.cards.map((c) => (
                 <Chip key={c.id} active={card === c.id} onClick={() => { setCard(c.id); if (!existing) setAmount(c.invoice) }}>
-                  {c.nickname}
+                  {cardShort(c)}
                 </Chip>
               ))}
             </div>
@@ -747,26 +749,33 @@ export function BankAccountSheet({ close, id, parentId }: { close: () => void; i
   const isSub = !!parent
   const children = account ? subaccounts(state, account.id) : []
   const [name, setName] = useState(account?.name ?? '')
+  const [nickname, setNickname] = useState(account?.nickname ?? '')
   const [kind, setKind] = useState<Account['kind']>(account?.kind ?? (isSub ? 'savings' : 'checking'))
   // Criar: quanto tem hoje. Editar: o saldo de quando começou (diferenças com o banco = Conferir saldo)
   const [balance, setBalance] = useState(account ? account.startingBalance : 0)
   const [tries, setTries] = useState(0)
   const [confirmDelete, setConfirmDelete] = useState(false)
-  const nameError = tries && !name.trim() ? (isSub ? 'Dê um nome à subconta.' : 'Dê um nome à conta.') : undefined
+  const nameError = tries && !name.trim() ? (isSub ? 'Dê um nome à subconta.' : 'Informe o banco.') : undefined
   const otherTops = topAccounts(state).filter((a) => a.id !== account?.id)
   const nowBalance = account ? Math.round((accountBalance(state, account.id) + balance - account.startingBalance) * 100) / 100 : balance
 
   async function save() {
     setTries((n) => n + 1)
     if (!name.trim()) return
-    const input = { name: name.trim(), kind, startingBalance: balance, ...(isSub && !account ? { parentId: parent!.id } : {}) }
+    const input = {
+      name: name.trim(),
+      ...(isSub ? {} : { nickname: nickname.trim() || undefined }),
+      kind,
+      startingBalance: balance,
+      ...(isSub && !account ? { parentId: parent!.id } : {}),
+    }
     const ok = account
       ? await run('save', () => accountsApi.update({ ...account, ...input }), (a) => dispatch({ type: 'saveAccount', account: a }), isSub ? 'Subconta atualizada' : 'Conta atualizada')
       : await run('save', () => accountsApi.create(input), (a) => dispatch({ type: 'saveAccount', account: a }), isSub ? 'Subconta criada' : 'Conta criada')
     if (ok) close()
   }
 
-  const title = account ? account.name : isSub ? 'Nova subconta' : 'Nova conta'
+  const title = account ? (account.nickname ? `${account.name} · ${account.nickname}` : account.name) : isSub ? 'Nova subconta' : 'Nova conta'
   return (
     <Sheet title={title} onClose={close}>
       <form
@@ -781,20 +790,31 @@ export function BankAccountSheet({ close, id, parentId }: { close: () => void; i
             Dentro de <span className="text-white">{parent!.name}</span>: poupança, caixinha, reserva… Use o nome que o seu banco usa.
           </p>
         )}
-        <Field label="Nome" htmlFor="accname" error={nameError} attempt={tries}>
+        <Field label={isSub ? 'Nome' : 'Banco'} htmlFor="accname" error={nameError} attempt={tries}>
           <input
             id="accname"
             className={inputClass}
-            placeholder={isSub ? 'Poupança, Caixinha viagem, Reserva…' : 'Nubank, Itaú, Dinheiro em espécie…'}
+            placeholder={isSub ? 'Poupança, Caixinha viagem, Reserva…' : 'Nubank, Itaú, Inter…'}
+            list={isSub ? undefined : BANK_LIST_ID}
+            autoComplete="off"
             value={name}
             onChange={(e) => setName(e.target.value)}
             maxLength={30}
           />
         </Field>
         {!isSub && (
+          <>
+            <BankSuggestions />
+            <Field label="Apelido (opcional)" htmlFor="accnick">
+              <input id="accnick" className={inputClass} placeholder="Dia a dia, Salário, Contas da casa…" value={nickname} onChange={(e) => setNickname(e.target.value)} maxLength={30} />
+            </Field>
+          </>
+        )}
+        {!isSub && (
           <Field label="Tipo">
             <div className="flex flex-wrap gap-2">
-              {ACCOUNT_KINDS.map((k) => (
+              {/* Dinheiro em espécie não é oferecido (sacar é com o banco); contas antigas desse tipo continuam */}
+              {ACCOUNT_KINDS.filter((k) => k.id !== 'wallet' || kind === 'wallet').map((k) => (
                 <Chip key={k.id} active={kind === k.id} onClick={() => setKind(k.id)}>
                   {k.label}
                 </Chip>
@@ -977,7 +997,7 @@ export function ReconcileSheet({ close, accountId, cardId }: { close: () => void
   const [real, setReal] = useState<number | null>(null)
   const [typed, setTyped] = useState(0)
   const diff = real === null ? 0 : Math.round((real - current) * 100) / 100
-  const label = account ? accountLabel(state, account.id) : card ? `${card.nickname} •• ${card.last4}` : ''
+  const label = account ? accountLabel(state, account.id) : card ? cardLabel(card) : ''
   const money = (n: number) => privateMoney(brl(n), hidden)
 
   if (!account && !card) return null
@@ -1207,7 +1227,7 @@ export function RecurrenceSheet({ close, id }: { close: () => void; id: string }
               <div className="flex flex-wrap gap-2">
                 {state.cards.map((c) => (
                   <Chip key={c.id} active={method === `card:${c.id}`} onClick={() => setMethod(`card:${c.id}`)}>
-                    {c.nickname}
+                    {cardShort(c)}
                   </Chip>
                 ))}
                 <Chip active={method === 'pix'} onClick={() => setMethod('pix')}>
@@ -1658,7 +1678,7 @@ export function OngoingInstallmentSheet({ close, id, cardId: initialCard }: { cl
         </Field>
         {existing?.installment ? (
           <p className="rounded-[18px] bg-esk-elevated px-4 py-3 font-sat text-[13px] text-esk-muted">
-            Parcela {existing.installment.number} de {existing.installment.total} · {card ? `${card.nickname} •• ${card.last4}` : 'Cartão'} · começou antes do Okiva
+            Parcela {existing.installment.number} de {existing.installment.total} · {card ? cardLabel(card) : 'Cartão'} · começou antes do Okiva
           </p>
         ) : (
           <>
@@ -1688,7 +1708,7 @@ export function OngoingInstallmentSheet({ close, id, cardId: initialCard }: { cl
                 <div className="flex flex-wrap gap-2">
                   {state.cards.map((c) => (
                     <Chip key={c.id} active={cardId === c.id} onClick={() => setCardId(c.id)}>
-                      {c.nickname}
+                      {cardShort(c)}
                     </Chip>
                   ))}
                 </div>

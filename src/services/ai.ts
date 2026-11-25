@@ -15,7 +15,7 @@ import { isExpense } from '../lib/ledger'
 import { categoryMeta } from '../data/categories'
 import { TODAY } from '../data/mock'
 import { brlShort, monthKey, monthName, toISO } from '../lib/format'
-import { balanceOf, currentMonth, goalPace, monthSummary, previousMonth } from '../state/store'
+import { balanceOf, cardShort, currentMonth, goalPace, monthSummary, previousMonth } from '../state/store'
 import type { AppState, CategoryId } from '../types'
 import { ApiError, request, USE_AI_MOCK } from './http'
 
@@ -268,7 +268,7 @@ function mockReply(question: string, state: AppState): AssistantReply {
   if (/cart|fatura|limite/.test(q)) {
     const front = state.cards.find((c) => c.id === state.cardOrder[state.cardOrder.length - 1])
     if (!front) return text('Você ainda não cadastrou cartões. Adicione um em Cartões para eu acompanhar a fatura e o limite.')
-    return text(`A fatura do ${front.nickname} está em `, [brlShort(front.invoice)], `, ${Math.round((front.invoice / front.limit) * 100)}% do limite.`)
+    return text(`A fatura do ${cardShort(front)} está em `, [brlShort(front.invoice)], `, ${Math.round((front.invoice / front.limit) * 100)}% do limite.`)
   }
 
   if (/saldo|quanto tenho|dinheiro tenho/.test(q)) {
