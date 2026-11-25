@@ -23,6 +23,7 @@ Especificação de negócio: [modelo-de-dados.md](modelo-de-dados.md) · contrat
 | `supabase/migrations/20261123120000_okiva_contas_recorrencias_parcelas.sql` | receitas, contas, recorrências, parcelas, pagamento de fatura, aviso de teto |
 | `supabase/migrations/20261123180000_okiva_categorias_editaveis.sql` | categorias do app viram sugestões editáveis |
 | `supabase/migrations/20261124120000_okiva_sem_categoria_regras.sql` | gasto sem categoria e regras aprendidas |
+| `supabase/migrations/20261125120000_okiva_hardening.sql` | sem admin, limites de tamanho/datas/quantidade por usuário, limite de mensagens de suporte |
 | `supabase/migrations/20261124180000_okiva_conta_suporte_seguranca.sql` | preferências de notificação, mensagens de suporte e confirmação por e-mail para apagar dados |
 | `supabase/templates/*.html` | e-mails em português (cadastro, código de confirmação, redefinir senha, trocar e-mail): colar no dashboard |
 | `supabase/seed.sql` | **seed temporário** da conta demo (mocks) |
@@ -115,21 +116,11 @@ Migration: `supabase/migrations/20261122191358_okiva_demo_accounts.sql`. O advis
 
 A conta fixa `lucas@okiva.app` continua existindo (sem senha) e não é usada pela demonstração.
 
-### Administrador de teste (TEMPORÁRIO)
+### Administrador
 
-- Conta `marcospostin@gmail.com` (Marcos), criada com `supabase/seed_admin.sql`, com os mesmos dados de exemplo da demo e `app_metadata.role = 'admin'`.
-- **Acesso total**: a migration `20261122174638_okiva_admin_role.sql` cria `public.is_admin()` (lê o claim do JWT, que o usuário não consegue alterar) e soma políticas de acesso total em todas as tabelas e nos buckets. Usuários comuns continuam vendo só os próprios dados.
-- No app, o admin vê só os próprios dados nas telas (todas as consultas filtram por `user_id`); o acesso total vale para o banco (SQL, PostgREST, Storage). A Conta mostra o selo **ADMIN**.
-- Criada **sem senha**. Defina a sua no SQL Editor (troque `SUA_SENHA`; evite senhas fracas como `123456`):
-
-```sql
-update auth.users
-   set encrypted_password = extensions.crypt('SUA_SENHA', extensions.gen_salt('bf'))
- where email = 'marcospostin@gmail.com';
-```
-
-- Remover depois: `supabase/cleanup_admin.sql` (tira o papel admin, ou apaga a conta, ou remove o recurso inteiro).
-- O advisor de performance passa a apontar "multiple permissive policies" (política de dono + política de admin): esperado enquanto o admin existir; some ao remover o recurso.
+Removido na etapa 10 (`20261125120000_okiva_hardening.sql`): as políticas de acesso total foram apagadas,
+`is_admin()` sempre devolve `false` e o papel saiu do `app_metadata`. Cada pessoa, inclusive o dono do projeto,
+só acessa os próprios dados. Para inspecionar o banco, use o SQL Editor do Supabase (papel de serviço).
 
 ### Antes de publicar na Vercel
 

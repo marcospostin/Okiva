@@ -156,7 +156,7 @@ Em toda escrita: botão em carregamento, sem envio duplo, toast de sucesso; em e
 - [x] Front ligado ao Supabase: login e cadastro reais, conta carregada das tabelas ao abrir, cada operação gravada no banco (ver `docs/supabase.md` → Front ligado ao banco)
 - [x] Validação de login/cadastro (e-mail, senha ≥ 6, confirmação) e mensagens de erro do Auth em português
 - [x] Papel admin (temporário): `is_admin()` + políticas de acesso total; testado (admin vê/edita tudo, usuário comum continua isolado)
-- [x] Usuário admin de teste `marcospostin@gmail.com` com dados de exemplo (`supabase/seed_admin.sql`, remover com `cleanup_admin.sql`)
+- [x] Papel de administrador removido (etapa 10, `20261125120000_okiva_hardening.sql`)
 - [x] Senha do admin definida e login real pelo app funcionando
 - [x] CRUD pelo app com sessão real, conferido no banco: gasto (criar → editar → apagar, com a fatura do cartão acompanhando), depósito em meta (criar → excluir, saved/deposited acompanhando), categoria (criar → recarregar a página e continuar lá → excluir)
 - [x] Pelo app, conferido no banco: cartões (criar → reordenar a carteira → editar → remover), metas (criar → editar + tornar principal → excluir, principal volta para a anterior), teto por categoria (criar → editar → remover, sem afetar outros usuários), teto do mês (editar → remover → recriar), fatura (importar 34 lançamentos → duplicata bloqueada pelo banco → desfazer, cartão volta à fatura anterior), perfil (nome, saldo, Plus, ocultar saldo, foto enviada ao bucket e lida após recarregar, remoção apaga o arquivo)

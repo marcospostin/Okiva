@@ -92,7 +92,8 @@ async function supabaseSignUp(input: { name: string; email: string; password: st
   })
   if (error) throw authError(error)
   // E-mail já cadastrado: o Supabase devolve um usuário sem identidades (proteção contra enumeração)
-  if (data.user && data.user.identities?.length === 0) throw authError({ message: 'already registered' })
+  // Mostra a mesma tela de "confirme seu e-mail" para não revelar quem já tem conta
+  if (data.user && data.user.identities?.length === 0) return { confirmEmail: email }
   // Projeto exige confirmação de e-mail: a conta só abre depois do link.
   // A foto espera neste navegador e é enviada no primeiro login.
   if (!data.session) {

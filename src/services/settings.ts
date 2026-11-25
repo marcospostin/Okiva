@@ -81,7 +81,8 @@ export const securityApi = {
     if (!USE_SUPABASE) return mock(undefined)
     const { error } = await sb().auth.updateUser({ email: newEmail.trim().toLowerCase() }, { emailRedirectTo: window.location.origin })
     if (error) {
-      if (/already|registered|exists/i.test(error.message)) throw new ApiError('Esse e-mail já é usado por outra conta.', 409)
+      // Mensagem genérica: não revela se o e-mail já é usado por outra conta
+      if (/already|registered|exists/i.test(error.message)) throw new ApiError('Não deu para usar esse e-mail. Confira e tente outro.', 422)
       throw sendError(error)
     }
   },
@@ -95,6 +96,15 @@ export const securityApi = {
       if (/different|same/i.test(error.message)) throw new ApiError('A nova senha precisa ser diferente da atual.', 422)
       throw authError(error)
     }
+    // Senha nova: as outras sessões (outros aparelhos) deixam de valer
+    await sb().auth.signOut({ scope: 'others' }).catch(() => undefined)
+  },
+
+  /** O banco considera a sessão verificada por e-mail nos últimos 15 min? (link "confirmar" do e-mail) */
+  isEmailVerifiedRecently: async (): Promise<boolean> => {
+    if (!USE_SUPABASE) return true
+    const { data, error } = await sb().rpc('recent_email_verification')
+    return !error && data === true
   },
 
   /** Nova senha depois do link "Esqueci minha senha" (a sessão de recuperação já está aberta). */
@@ -163,6 +173,10 @@ export const supportApi = {
     const { error } = await sb()
       .from('support_requests')
       .insert({ kind: input.kind, message: input.message.trim(), rating: input.rating ?? null, meta: (input.meta ?? deviceInfo()) as never })
-    if (error) throw new ApiError('Não deu para enviar agora. Tente de novo.', 500)
+    if (error) {
+      // Limites do banco (demonstração, muitas mensagens seguidas) já vêm com a mensagem pronta
+      if (error.code === 'P0001' || error.code === '42501') throw new ApiError(error.message, 429)
+      throw new ApiError('Não deu para enviar agora. Tente de novo.', 500)
+    }
   },
 }

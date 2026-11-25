@@ -51,8 +51,17 @@ Por isso a Vercel só precisa de **duas** variáveis.
 
 Supabase → **Authentication → URL Configuration**:
 - **Site URL**: `https://<seu-projeto>.vercel.app`
-- **Redirect URLs**: adicione o mesmo domínio (e `https://*-<seu-usuario>.vercel.app` se quiser previews).
+- **Redirect URLs**: adicione **só** o mesmo domínio (ex.: `https://okiva.vercel.app`) e, para testar no computador, `http://localhost:8443`.
+  **Nunca use curinga em `*.vercel.app`**: qualquer pessoa pode criar um subdomínio `vercel.app` e receber os links de
+  recuperação de senha / código das vítimas (roubo de conta). Para previews, use um domínio próprio ou outro projeto Supabase.
 Sem isso, o link de confirmação de cadastro volta para `localhost`.
+
+### 4b. Cabeçalhos de segurança
+
+`vercel.json` define CSP (só scripts do próprio site, fontes Fontshare/Google/Figma, imagens e API do Supabase),
+`frame-ancestors 'none'` / `X-Frame-Options: DENY` (o app não pode ser embutido), HSTS, `nosniff`, `Referrer-Policy`
+e `Permissions-Policy`. Ao adicionar um serviço externo novo (fonte, analytics, outro domínio de API), inclua o domínio
+na CSP, senão o navegador bloqueia. Conferir: `curl -I https://okiva.vercel.app`.
 
 ### 5. Conferir
 

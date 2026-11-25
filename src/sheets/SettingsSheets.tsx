@@ -2,7 +2,7 @@
  * Sheets da tela Conta: perfil, plano, segurança (e-mail, senha, sessões), notificações,
  * ajuda, relatar problema, avaliar e a confirmação por senha + código para ações sem volta.
  */
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Bug, Check, ChevronDown, ChevronRight, Lock, Mail, MessageCircle, MonitorSmartphone, ShieldCheck, Sparkles, Star } from 'lucide-react'
 import { cx, Field, inputClass, PrimaryButton, Sheet, Switch } from '../components/ui'
 import { PasswordInput, PasswordStrength, passwordMeetsRules } from '../screens/Login'
@@ -363,7 +363,7 @@ const ACTIONS = {
   },
 } as const
 
-type Step = 'password' | 'code' | 'final'
+type Step = 'checking' | 'password' | 'code' | 'final'
 
 /**
  * Ações sem volta pedem senha e um código enviado ao e-mail (o banco confere a verificação
@@ -375,7 +375,19 @@ export function VerifyActionSheet({ action, confirmed, close }: { action: 'reset
   const { run, pending } = useMutation()
   const cfg = ACTIONS[action]
   const simple = !USE_SUPABASE || !!state.user?.demo
-  const [step, setStep] = useState<Step>(simple || confirmed ? 'final' : 'password')
+  const [step, setStep] = useState<Step>(simple ? 'final' : confirmed ? 'checking' : 'password')
+  // Veio pelo link do e-mail: só pula para a confirmação final se o banco confirmar a verificação recente
+  // (um link "?confirmar=" forjado volta para o passo da senha)
+  useEffect(() => {
+    if (!confirmed || simple) return
+    let alive = true
+    securityApi.isEmailVerifiedRecently().then((ok) => {
+      if (alive) setStep(ok ? 'final' : 'password')
+    })
+    return () => {
+      alive = false
+    }
+  }, [confirmed, simple])
   const [password, setPassword] = useState('')
   const [code, setCode] = useState('')
   const [word, setWord] = useState('')
@@ -481,6 +493,8 @@ export function VerifyActionSheet({ action, confirmed, close }: { action: 'reset
             ))}
           </ol>
         )}
+
+        {step === 'checking' && <p className="font-sat text-[14px] text-esk-muted">Conferindo a confirmação do e-mail…</p>}
 
         {step === 'password' && (
           <form className="flex flex-col gap-5" onSubmit={(e) => { e.preventDefault(); checkPassword() }}>
