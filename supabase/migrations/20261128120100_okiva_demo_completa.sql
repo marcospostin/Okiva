@@ -3,7 +3,8 @@
 -- =============================================================================
 -- Lucas: renda de R$ 7.000, teto de R$ 7.000, gasta ~R$ 4.800/mês e guarda o resto.
 -- Mostra tudo o que o app faz, já preenchido:
---   contas e subcontas    Nubank "Dia a dia" (+ "Reserva de emergência", "Caixinha viagem" e "Caixinha imóvel")
+--   contas e subcontas    Nubank "Principal" (+ "Reserva de emergência", "Caixinha viagem" e "Caixinha imóvel")
+--                         e Porto Bank "Dia a dia" (gastos pequenos no débito/Pix, com nomes de extrato)
 --   cartões               Nubank, Inter e XP; faturas pagas todo mês; fatura do mês aberta
 --   recorrências          salário, aluguel R$ 1.700, plano de saúde, internet, academia, streaming
 --   compras parceladas    Notebook 10× e passagem aérea 6× (parcelas futuras já lançadas)
@@ -26,7 +27,7 @@ declare
   v_month date := date_trunc('month', current_date)::date;
   v_today date := current_date;
   v_start date := (date_trunc('month', current_date) - interval '3 months')::date;
-  v_acc uuid; v_reserva uuid; v_viagem uuid; v_casa uuid;
+  v_acc uuid; v_reserva uuid; v_viagem uuid; v_casa uuid; v_porto uuid;
   v_nu uuid; v_inter uuid; v_xp uuid;
   v_imovel uuid; v_portugal uuid; v_ingles uuid;
   v_rec uuid; v_inv uuid; v_group uuid;
@@ -49,10 +50,12 @@ begin
   perform public.seed_default_categories(v_uid);
 
   -- ------------------------------------------------------------ contas e subcontas
-  insert into public.accounts (user_id, name, nickname, kind, starting_balance) values (v_uid, 'Nubank', 'Dia a dia', 'checking', 1500) returning id into v_acc;
+  insert into public.accounts (user_id, name, nickname, kind, starting_balance) values (v_uid, 'Nubank', 'Principal', 'checking', 1500) returning id into v_acc;
   insert into public.accounts (user_id, name, kind, starting_balance, parent_id) values (v_uid, 'Reserva de emergência', 'savings', 0, v_acc) returning id into v_reserva;
   insert into public.accounts (user_id, name, kind, starting_balance, parent_id) values (v_uid, 'Caixinha viagem', 'savings', 0, v_acc) returning id into v_viagem;
   insert into public.accounts (user_id, name, kind, starting_balance, parent_id) values (v_uid, 'Caixinha imóvel', 'savings', 0, v_acc) returning id into v_casa;
+  -- Conta do dia a dia: só débito/Pix, abastecida pela principal todo mês
+  insert into public.accounts (user_id, name, nickname, kind, starting_balance) values (v_uid, 'Porto Bank', 'Dia a dia', 'checking', 0) returning id into v_porto;
 
   -- ------------------------------------------------------------ cartões (no Okiva há 4 meses)
   insert into public.cards (user_id, bank, nickname, last4, color, opening_invoice, "limit", due_day, position, started_on)
@@ -71,13 +74,15 @@ begin
       select * from (values
         ('Mercado', 'alimentacao', 'nu', 3, 212.40), ('Mercado', 'alimentacao', 'nu', 11, 186.90),
         ('Mercado', 'alimentacao', 'nu', 19, 238.70), ('Mercado', 'alimentacao', 'nu', 26, 164.30),
-        ('Padaria', 'alimentacao', 'pix', 7, 38.50), ('Feira livre', 'alimentacao', 'pix', 14, 56.00),
-        ('Pastelaria', 'alimentacao', 'pix', 21, 24.00), ('Barbearia', 'outros', 'pix', 25, 50.00),
+        ('PadariaJoel345', 'alimentacao', 'porto', 7, 38.50), ('FeiraDoSeuZe', 'alimentacao', 'porto', 14, 56.00),
+        ('PastelariaKiko', 'alimentacao', 'porto', 21, 24.00), ('BarbeariaDoTony', 'outros', 'porto', 25, 50.00),
+        ('RestBomSabor', 'alimentacao', 'porto', 9, 38.90), ('CafeteriaGrao12', 'alimentacao', 'porto', 16, 14.50),
+        ('MercadinhoSaoJorge', 'alimentacao', 'porto', 22, 47.80), ('DrogariaVila0231', 'saude', 'porto', 27, 29.90),
         ('iFood', 'alimentacao', 'inter', 6, 62.90), ('iFood', 'alimentacao', 'inter', 14, 48.50),
         ('iFood', 'alimentacao', 'inter', 23, 74.80), ('Restaurante', 'alimentacao', 'nu', 17, 146.00),
         ('Uber', 'transporte', 'inter', 4, 27.90), ('Uber', 'transporte', 'inter', 12, 34.60),
         ('Uber', 'transporte', 'inter', 20, 22.40), ('Uber', 'transporte', 'inter', 27, 31.20),
-        ('Bilhete Único', 'transporte', 'pix', 2, 120.00),
+        ('SPTrans*BilheteUnico', 'transporte', 'porto', 2, 120.00),
         ('Conta de luz', 'moradia', 'pix', 15, 142.30), ('Conta de água', 'moradia', 'pix', 18, 58.40),
         ('Farmácia', 'saude', 'nu', 9, 64.70),
         ('Cinema', 'lazer', 'xp', 13, 58.00), ('Bar com amigos', 'lazer', 'xp', 24, 96.50)
@@ -90,7 +95,7 @@ begin
       values (v_uid, r.name, r.cat,
               (case when r.pay in ('nu', 'inter', 'xp') then 'card' else 'pix' end)::public.payment_method,
               case r.pay when 'nu' then v_nu when 'inter' then v_inter when 'xp' then v_xp end,
-              case when r.pay = 'pix' then v_acc end,
+              case when r.pay = 'pix' then v_acc when r.pay = 'porto' then v_porto end,
               d, v_amt, 'manual', 'expense');
     end loop;
   end loop;
@@ -149,7 +154,8 @@ begin
       insert into public.transactions (user_id, kind, name, method_type, account_id, transfer_account_id, date, amount, source) values
         (v_uid, 'transfer', 'Guardar na reserva', 'pix', v_acc, v_reserva, d, 500, 'manual'),
         (v_uid, 'transfer', 'Guardar para a viagem', 'pix', v_acc, v_viagem, d, 300, 'manual'),
-        (v_uid, 'transfer', 'Guardar para o imóvel', 'pix', v_acc, v_casa, d, 1500, 'manual');
+        (v_uid, 'transfer', 'Guardar para o imóvel', 'pix', v_acc, v_casa, d, 1500, 'manual'),
+        (v_uid, 'transfer', 'Separar para o dia a dia', 'pix', v_acc, v_porto, d, 450, 'manual');
     end if;
     d := (v_month - make_interval(months => k))::date;
     insert into public.transactions (user_id, name, category, method_type, account_id, date, amount, source, kind)
@@ -216,7 +222,7 @@ begin
                       end)
              from public.transactions t
             where t.user_id = v_uid and t.date <= v_today and (t.account_id = a.id or t.transfer_account_id = a.id)), 0)
-    from (values (v_reserva, 24180.00), (v_viagem, 2350.00), (v_casa, 56000.00)) as x(id, target)
+    from (values (v_reserva, 24180.00), (v_viagem, 2350.00), (v_casa, 56000.00), (v_porto, 380.00)) as x(id, target)
    where a.id = x.id;
 
   -- Conferências com o banco
