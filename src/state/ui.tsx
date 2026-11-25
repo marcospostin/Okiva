@@ -11,7 +11,11 @@ export type SheetState =
   /** Compra parcelada que começou antes do Okiva (id = editar uma existente) */
   | { type: 'ongoing'; cardId?: string; id?: string }
   /** Nova conta (sem id) ou editar/excluir */
-  | { type: 'bankAccount'; id?: string }
+  | { type: 'bankAccount'; id?: string; parentId?: string }
+  /** Mover dinheiro entre contas/subcontas (id = editar) */
+  | { type: 'transfer'; id?: string; from?: string; to?: string }
+  /** Conferir saldo (conta) ou fatura (cartão) com o banco */
+  | { type: 'reconcile'; accountId?: string; cardId?: string }
   /** Editar, encerrar ou apagar uma recorrência */
   | { type: 'recurrence'; id: string }
   /** Classificar gastos sem categoria (id = começar por este) */

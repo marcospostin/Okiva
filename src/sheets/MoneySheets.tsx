@@ -3,12 +3,13 @@
  * pagar fatura, contas, recorrências e aviso de teto.
  */
 import { useRef, useState } from 'react'
-import { BellRing, ChevronRight, Minus, Plus, Repeat } from 'lucide-react'
+import { ArrowLeftRight, BellRing, ChevronRight, Minus, Plus, Repeat, Scale } from 'lucide-react'
 import { categoryIds, categoryMeta, normalizeLabel } from '../data/categories'
 import { REPORTS_EVENT } from '../lib/reports'
 import { CategoryRowIcon } from '../components/icons'
 import { Chip, cx, Field, inputClass, MoneyInput, PrimaryButton, SearchField, SearchSummary, Sheet, Switch } from '../components/ui'
 import { searchTransactions } from '../lib/search'
+import { movementAmount } from '../lib/movements'
 import { brl, brlShort, longDate, monthKey, monthName, privateExpense, privateIncome, privateMoney } from '../lib/format'
 import {
   ACCOUNT_KINDS,
@@ -22,11 +23,11 @@ import {
   nextDate,
   splitInstallments,
 } from '../lib/ledger'
-import { accountBalance, accountName, capAlert, capWarning, methodLabel, ruleFor, todayISO, uncategorized, useStore } from '../state/store'
-import { accountsApi, budgetApi, categoriesApi, installmentsApi, recurrencesApi, rulesApi, transactionsApi } from '../services/finance'
+import { accountBalance, accountLabel, accountName, capAlert, subaccounts, topAccounts, capWarning, methodLabel, ruleFor, todayISO, uncategorized, useStore } from '../state/store'
+import { accountsApi, budgetApi, cardsApi, categoriesApi, installmentsApi, recurrencesApi, rulesApi, transactionsApi } from '../services/finance'
 import { useMutation } from '../state/useMutation'
 import { useUI } from '../state/ui'
-import type { Account, CategoryId, PaymentMethod, Recurrence, Transaction } from '../types'
+import type { Account, AppState, CategoryId, PaymentMethod, Recurrence, Transaction } from '../types'
 
 /** Keeps the last value of an entity so a sheet can play its exit animation after the entity is deleted. */
 export function useLast<T>(value: T | undefined) {
@@ -103,11 +104,15 @@ function KindSwitch({ value, onChange }: { value: 'expense' | 'income'; onChange
 }
 
 function AccountChips({ value, onChange, accounts }: { value: string; onChange: (id: string) => void; accounts: Account[] }) {
+  const { state } = useStore()
+  // Conta e logo depois as subcontas dela ("Nubank", "Nubank · Caixinha")
+  const ordered = accounts.filter((a) => !a.parentId).flatMap((a) => [a, ...accounts.filter((x) => x.parentId === a.id)])
+  const rest = accounts.filter((a) => !ordered.includes(a))
   return (
     <div className="flex flex-wrap gap-2">
-      {accounts.map((a) => (
+      {[...ordered, ...rest].map((a) => (
         <Chip key={a.id} active={value === a.id} onClick={() => onChange(a.id)}>
-          {a.name}
+          {accountLabel(state, a.id)}
         </Chip>
       ))}
     </div>
@@ -479,7 +484,16 @@ export function TransactionSheet({ close, id }: { close: () => void; id: string 
   const card = t.method.type === 'card' ? state.cards.find((c) => c.id === (t.method as { cardId: string }).cardId) : undefined
 
   const rows: [string, string][] = []
-  if (k === 'income') {
+  const movement = k === 'transfer' || k === 'adjustment'
+  if (k === 'transfer') {
+    rows.push(['De', accountLabel(state, t.accountId)], ['Para', accountLabel(state, t.transferAccountId)])
+  } else if (k === 'adjustment') {
+    rows.push(
+      [card ? 'Cartão' : 'Conta', card ? `${card.nickname} • ${card.last4}` : accountLabel(state, t.accountId)],
+      ['Motivo', 'Conferência com o banco'],
+      ['Conta no mês?', 'Não: só corrige o valor'],
+    )
+  } else if (k === 'income') {
     rows.push(['Origem', incomeLabel(t.category)], ['Recebido em', accountName(state, t.accountId)])
   } else if (k === 'invoice_payment') {
     rows.push(['Cartão', card ? `${card.nickname} • ${card.last4}` : 'Cartão removido'], ['Pago com', accountName(state, t.accountId)])
@@ -501,28 +515,64 @@ export function TransactionSheet({ close, id }: { close: () => void; id: string 
     rows.push(['Data', longDate(t.date)])
   }
   if (rec) rows.push(['Repete', `Todo dia ${rec.day}`])
+  if (k === 'transfer') rows.push(['Conta no mês?', 'Não: o dinheiro só mudou de lugar'])
   if (k === 'expense' && !t.installment) rows.push(['Origem', t.source === 'fatura' ? 'Lido da fatura (IA)' : rec ? 'Recorrência' : 'Digitado por você'])
 
-  const title = k === 'income' ? 'Detalhe da receita' : k === 'invoice_payment' ? 'Pagamento de fatura' : t.installment ? 'Compra parcelada' : 'Detalhe da compra'
-  const question = t.installment
+  const title =
+    k === 'transfer'
+      ? 'Transferência'
+      : k === 'adjustment'
+        ? 'Ajuste'
+        : k === 'income'
+          ? 'Detalhe da receita'
+          : k === 'invoice_payment'
+            ? 'Pagamento de fatura'
+            : t.installment
+              ? 'Compra parcelada'
+              : 'Detalhe da compra'
+  const question = movement
+    ? k === 'transfer'
+      ? 'Apagar esta transferência? O dinheiro volta para a conta de origem.'
+      : card
+        ? 'Apagar este ajuste? A fatura volta ao valor de antes.'
+        : 'Apagar este ajuste? O saldo volta ao valor de antes.'
+    : t.installment
     ? `Apagar a compra inteira? As ${t.installment.total} parcelas saem de todos os meses.`
     : k === 'income'
       ? 'Apagar esta receita? O valor sai do saldo.'
       : k === 'invoice_payment'
         ? 'Apagar este pagamento? A fatura e o saldo voltam ao que eram.'
         : 'Apagar este gasto? O saldo e o mês voltam ao que eram.'
-  const edit = () => (k === 'invoice_payment' ? openSheet({ type: 'payInvoice', id: t.id }) : openSheet({ type: 'edit', id: t.id }))
+  const edit = () =>
+    k === 'invoice_payment'
+      ? openSheet({ type: 'payInvoice', id: t.id })
+      : k === 'transfer'
+        ? openSheet({ type: 'transfer', id: t.id })
+        : openSheet({ type: 'edit', id: t.id })
 
   return (
     <Sheet title={title} onClose={close}>
       <div className="flex items-center gap-4">
         <span className="grid size-[56px] place-items-center rounded-full bg-esk-row">
-          {k === 'income' ? <Plus size={24} className="text-esk-lime" aria-hidden /> : <CategoryRowIcon category={t.category} name={t.name} size={24} />}
+          {k === 'transfer' ? (
+            <ArrowLeftRight size={24} className="text-esk-text-2" aria-hidden />
+          ) : k === 'adjustment' ? (
+            <Scale size={24} className="text-esk-text-2" aria-hidden />
+          ) : k === 'income' ? (
+            <Plus size={24} className="text-esk-lime" aria-hidden />
+          ) : (
+            <CategoryRowIcon category={t.category} name={t.name} size={24} />
+          )}
         </span>
         <div className="min-w-0">
           <p className="truncate font-sat text-[17px] font-medium text-white">{t.name}</p>
-          <p className={cx('font-sat text-[34px] leading-[40px] font-medium tracking-[-1.4px]', k === 'income' ? 'text-esk-positive' : 'text-esk-negative')}>
-            {k === 'income' ? privateIncome(t.amount, hidden) : privateExpense(t.amount, hidden)}
+          <p
+            className={cx(
+              'font-sat text-[34px] leading-[40px] font-medium tracking-[-1.4px]',
+              movement ? 'text-white' : k === 'income' ? 'text-esk-positive' : 'text-esk-negative',
+            )}
+          >
+            {movement ? movementAmount(t, hidden) : k === 'income' ? privateIncome(t.amount, hidden) : privateExpense(t.amount, hidden)}
           </p>
           {t.date > today && <p className="font-sat text-[13px] text-esk-muted">Previsto para {longDate(t.date)}</p>}
         </div>
@@ -583,11 +633,11 @@ export function TransactionSheet({ close, id }: { close: () => void; id: string 
           </div>
         </div>
       ) : (
-        <div className="mt-6 grid grid-cols-2 gap-3">
+        <div className={cx('mt-6 grid gap-3', k === 'adjustment' ? 'grid-cols-1' : 'grid-cols-2')}>
           <PrimaryButton tone="danger" onClick={() => setConfirming(true)}>
             {t.installment ? 'Apagar compra' : 'Apagar'}
           </PrimaryButton>
-          <PrimaryButton onClick={edit}>Editar</PrimaryButton>
+          {k !== 'adjustment' && <PrimaryButton onClick={edit}>Editar</PrimaryButton>}
         </div>
       )}
     </Sheet>
@@ -688,71 +738,378 @@ export function PayInvoiceSheet({ close, cardId, id }: { close: () => void; card
 
 /* ------------------------------------------------------------------ Contas */
 
-export function BankAccountSheet({ close, id }: { close: () => void; id?: string }) {
+export function BankAccountSheet({ close, id, parentId }: { close: () => void; id?: string; parentId?: string }) {
   const { state, dispatch } = useStore()
+  const { openSheet } = useUI()
   const { run, pending } = useMutation()
   const account = useLast(id ? state.accounts.find((a) => a.id === id) : undefined)
-  const movement = account ? accountBalance(state, account.id) - account.startingBalance : 0
+  const parent = state.accounts.find((a) => a.id === (account?.parentId ?? parentId))
+  const isSub = !!parent
+  const children = account ? subaccounts(state, account.id) : []
   const [name, setName] = useState(account?.name ?? '')
-  const [kind, setKind] = useState<Account['kind']>(account?.kind ?? 'checking')
-  const [balance, setBalance] = useState(account ? accountBalance(state, account.id) : 0)
+  const [kind, setKind] = useState<Account['kind']>(account?.kind ?? (isSub ? 'savings' : 'checking'))
+  // Criar: quanto tem hoje. Editar: o saldo de quando começou (diferenças com o banco = Conferir saldo)
+  const [balance, setBalance] = useState(account ? account.startingBalance : 0)
   const [tries, setTries] = useState(0)
   const [confirmDelete, setConfirmDelete] = useState(false)
-  const nameError = tries && !name.trim() ? 'Dê um nome à conta.' : undefined
-  const others = state.accounts.filter((a) => a.id !== account?.id)
+  const nameError = tries && !name.trim() ? (isSub ? 'Dê um nome à subconta.' : 'Dê um nome à conta.') : undefined
+  const otherTops = topAccounts(state).filter((a) => a.id !== account?.id)
+  const nowBalance = account ? Math.round((accountBalance(state, account.id) + balance - account.startingBalance) * 100) / 100 : balance
 
   async function save() {
     setTries((n) => n + 1)
     if (!name.trim()) return
-    // A pessoa digita o saldo de hoje; o saldo inicial absorve a diferença
-    const input = { name: name.trim(), kind, startingBalance: Math.round((balance - movement) * 100) / 100 }
+    const input = { name: name.trim(), kind, startingBalance: balance, ...(isSub && !account ? { parentId: parent!.id } : {}) }
     const ok = account
-      ? await run('save', () => accountsApi.update({ ...account, ...input }), (a) => dispatch({ type: 'saveAccount', account: a }), 'Conta atualizada')
-      : await run('save', () => accountsApi.create(input), (a) => dispatch({ type: 'saveAccount', account: a }), 'Conta criada')
+      ? await run('save', () => accountsApi.update({ ...account, ...input }), (a) => dispatch({ type: 'saveAccount', account: a }), isSub ? 'Subconta atualizada' : 'Conta atualizada')
+      : await run('save', () => accountsApi.create(input), (a) => dispatch({ type: 'saveAccount', account: a }), isSub ? 'Subconta criada' : 'Conta criada')
     if (ok) close()
   }
 
+  const title = account ? account.name : isSub ? 'Nova subconta' : 'Nova conta'
   return (
-    <Sheet title={account ? account.name : 'Nova conta'} onClose={close}>
-      <form className="flex flex-col gap-5" onSubmit={(e) => { e.preventDefault(); save() }}>
+    <Sheet title={title} onClose={close}>
+      <form
+        className="flex flex-col gap-5"
+        onSubmit={(e) => {
+          e.preventDefault()
+          save()
+        }}
+      >
+        {isSub && (
+          <p className="-mt-2 font-sat text-[13px] leading-[1.45] text-esk-muted">
+            Dentro de <span className="text-white">{parent!.name}</span>: poupança, caixinha, reserva… Use o nome que o seu banco usa.
+          </p>
+        )}
         <Field label="Nome" htmlFor="accname" error={nameError} attempt={tries}>
-          <input id="accname" className={inputClass} placeholder="Nubank, Itaú, Carteira…" value={name} onChange={(e) => setName(e.target.value)} maxLength={30} />
+          <input
+            id="accname"
+            className={inputClass}
+            placeholder={isSub ? 'Poupança, Caixinha viagem, Reserva…' : 'Nubank, Itaú, Carteira…'}
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            maxLength={30}
+          />
         </Field>
-        <Field label="Tipo">
-          <div className="flex flex-wrap gap-2">
-            {ACCOUNT_KINDS.map((k) => (
-              <Chip key={k.id} active={kind === k.id} onClick={() => setKind(k.id)}>
-                {k.label}
-              </Chip>
-            ))}
-          </div>
-        </Field>
-        <Field label={account ? 'Saldo hoje' : 'Quanto tem nela hoje'} htmlFor="accbal">
+        {!isSub && (
+          <Field label="Tipo">
+            <div className="flex flex-wrap gap-2">
+              {ACCOUNT_KINDS.map((k) => (
+                <Chip key={k.id} active={kind === k.id} onClick={() => setKind(k.id)}>
+                  {k.label}
+                </Chip>
+              ))}
+            </div>
+          </Field>
+        )}
+        <Field label={account ? 'Saldo quando começou' : 'Quanto tem nela hoje'} htmlFor="accbal">
           <MoneyInput id="accbal" value={balance} onChange={setBalance} />
         </Field>
-        <p className="-mt-2 font-sat text-[13px] text-esk-subtle">
-          {account ? 'Corrija se o valor estiver diferente do app do banco. As receitas e gastos registrados continuam.' : 'O saldo da Home soma todas as suas contas.'}
+        <p className="-mt-2 font-sat text-[13px] leading-[1.45] text-esk-subtle">
+          {account ? (
+            <>
+              O que havia quando você cadastrou. Os lançamentos somam por cima: saldo agora {privateMoney(brl(nowBalance), state.hideBalance)}. Diferente do banco?{' '}
+              <button type="button" className="text-esk-lime-soft hover:underline" onClick={() => openSheet({ type: 'reconcile', accountId: account.id })}>
+                Conferir saldo
+              </button>
+            </>
+          ) : isSub ? (
+            `Soma no total de ${parent!.name}.`
+          ) : (
+            'O saldo da Home soma todas as suas contas.'
+          )}
         </p>
         <PrimaryButton type="submit" loading={pending === 'save'}>
-          {account ? 'Salvar conta' : 'Criar conta'}
+          {account ? 'Salvar' : isSub ? 'Criar subconta' : 'Criar conta'}
         </PrimaryButton>
         {account &&
-          (others.length ? (
+          (children.length > 0 ? (
+            <p className="text-center font-sat text-[13px] text-esk-subtle">Para excluir esta conta, exclua antes as subcontas dela.</p>
+          ) : isSub || otherTops.length ? (
             <ConfirmDelete
               open={confirmDelete}
               onOpen={() => setConfirmDelete(true)}
               onCancel={() => setConfirmDelete(false)}
-              label="Excluir conta"
-              question={`Excluir ${account.name}? Os lançamentos e o saldo dela passam para ${others[0].name}.`}
+              label={isSub ? 'Excluir subconta' : 'Excluir conta'}
+              question={
+                isSub
+                  ? `Excluir ${account.name}? O saldo e os lançamentos voltam para ${parent!.name}.`
+                  : `Excluir ${account.name}? Os lançamentos e o saldo dela passam para ${otherTops[0].name}.`
+              }
               loading={pending === 'delete'}
               onConfirm={async () => {
-                if (await run('delete', () => accountsApi.remove(account.id), () => dispatch({ type: 'deleteAccount', id: account.id }), 'Conta excluída', 'Não deu para excluir. Tente de novo.')) close()
+                if (await run('delete', () => accountsApi.remove(account.id), () => dispatch({ type: 'deleteAccount', id: account.id }), isSub ? 'Subconta excluída' : 'Conta excluída', 'Não deu para excluir. Tente de novo.')) close()
               }}
             />
           ) : (
             <p className="text-center font-sat text-[13px] text-esk-subtle">Você precisa de ao menos uma conta.</p>
           ))}
       </form>
+    </Sheet>
+  )
+}
+
+/* ------------------------------------------------------------ Mover dinheiro */
+
+/** Contas e subcontas em ordem: Nubank, Nubank · Caixinha, Inter… */
+function accountOptions(state: AppState) {
+  return topAccounts(state).flatMap((a) => [a, ...subaccounts(state, a.id)])
+}
+
+export function TransferSheet({ close, id, from: initialFrom, to: initialTo }: { close: () => void; id?: string; from?: string; to?: string }) {
+  const { state, dispatch } = useStore()
+  const { run, pending } = useMutation()
+  const hidden = state.hideBalance
+  const today = todayISO()
+  const existing = useLast(id ? state.transactions.find((t) => t.id === id) : undefined)
+  const options = accountOptions(state)
+  const [from, setFrom] = useState(existing?.accountId ?? initialFrom ?? options[0]?.id ?? '')
+  const [to, setTo] = useState(existing?.transferAccountId ?? initialTo ?? options.find((a) => a.id !== (initialFrom ?? options[0]?.id))?.id ?? '')
+  const [amount, setAmount] = useState(existing?.amount ?? 0)
+  const [date, setDate] = useState(existing?.date ?? today)
+  const [note, setNote] = useState(existing && existing.name !== 'Transferência' ? existing.name : '')
+  const [tries, setTries] = useState(0)
+  const errors = {
+    amount: amount <= 0 ? 'Informe o valor.' : undefined,
+    to: !to || to === from ? 'Escolha uma conta de destino diferente da origem.' : undefined,
+    date: date > today ? 'A data não pode ser no futuro.' : undefined,
+  }
+  const show = (e?: string) => (tries ? e : undefined)
+  // Saldo de origem depois (desconta o que esta transferência já tirava, ao editar)
+  const fromNow = from ? accountBalance(state, from) + (existing && existing.accountId === from ? existing.amount : 0) : 0
+
+  async function save() {
+    setTries((n) => n + 1)
+    if (Object.values(errors).some(Boolean)) return
+    const tx: Omit<Transaction, 'id'> = {
+      kind: 'transfer',
+      name: note.trim() || 'Transferência',
+      category: null,
+      method: { type: 'pix' },
+      accountId: from,
+      transferAccountId: to,
+      date,
+      amount,
+      source: 'manual',
+    }
+    const msg = `${privateMoney(brl(amount), hidden)} para ${accountLabel(state, to)}`
+    const ok = existing
+      ? await run('save', () => transactionsApi.update({ ...existing, ...tx }), (t) => dispatch({ type: 'updateTx', tx: t }), 'Transferência atualizada')
+      : await run('save', () => transactionsApi.create(tx), (t) => dispatch({ type: 'addTx', tx: t }), msg)
+    if (ok) close()
+  }
+
+  const chips = (value: string, onChange: (v: string) => void, exclude?: string) => (
+    <div className="flex flex-wrap gap-2">
+      {options
+        .filter((a) => a.id !== exclude)
+        .map((a) => (
+          <Chip key={a.id} active={value === a.id} onClick={() => onChange(a.id)}>
+            {accountLabel(state, a.id)}
+          </Chip>
+        ))}
+    </div>
+  )
+
+  return (
+    <Sheet title={existing ? 'Editar transferência' : 'Mover dinheiro'} onClose={close}>
+      <form
+        className="flex flex-col gap-5"
+        onSubmit={(e) => {
+          e.preventDefault()
+          save()
+        }}
+      >
+        <p className="-mt-2 font-sat text-[13px] leading-[1.45] text-esk-muted">
+          Guardar na caixinha, resgatar da poupança, passar de um banco para outro. Não é gasto nem receita: o total não muda.
+        </p>
+        <Field label="Valor" htmlFor="tr-amount" error={show(errors.amount)} attempt={tries}>
+          <MoneyInput id="tr-amount" value={amount} onChange={setAmount} large autoFocus={!existing} />
+        </Field>
+        <Field label="De">
+          {chips(from, (v) => {
+            setFrom(v)
+            if (v === to) setTo(options.find((a) => a.id !== v)?.id ?? '')
+          })}
+          {from && <p className="font-sat text-[12px] text-esk-subtle">Saldo: {privateMoney(brl(fromNow), hidden)}</p>}
+        </Field>
+        <Field label="Para" error={show(errors.to)} attempt={tries}>
+          {chips(to, setTo, from)}
+        </Field>
+        <Field label="Data" htmlFor="tr-date" error={show(errors.date)} attempt={tries}>
+          <input id="tr-date" type="date" max={today} className={inputClass} value={date} onChange={(e) => setDate(e.target.value)} />
+        </Field>
+        <Field label="Descrição (opcional)" htmlFor="tr-note">
+          <input id="tr-note" className={inputClass} placeholder="Guardar para a viagem…" value={note} onChange={(e) => setNote(e.target.value)} maxLength={40} />
+        </Field>
+        {amount > fromNow && from && (
+          <p role="status" className="animate-rise font-sat text-[13px] text-esk-lilac">
+            A origem fica negativa em {privateMoney(brl(amount - fromNow), hidden)}. Confira o valor.
+          </p>
+        )}
+        <PrimaryButton type="submit" loading={pending === 'save'}>
+          {existing ? 'Salvar' : 'Mover'}
+        </PrimaryButton>
+      </form>
+    </Sheet>
+  )
+}
+
+/* ------------------------------------------------------------ Conferir saldo / fatura */
+
+type ReconcileChoice = 'rendimento' | 'tarifa' | 'esqueci' | 'naosei'
+
+/**
+ * Conferir com o banco. A pessoa digita o valor real; o Okiva mostra a diferença desde a última
+ * conferência e ajuda a explicar: rendimento, juros/tarifa, algo esquecido ou "não sei" (ajuste
+ * neutro, fora de teto e relatórios). Sempre registra a data da conferência.
+ */
+export function ReconcileSheet({ close, accountId, cardId }: { close: () => void; accountId?: string; cardId?: string }) {
+  const { state, dispatch } = useStore()
+  const { openSheet } = useUI()
+  const { run, pending } = useMutation()
+  const hidden = state.hideBalance
+  const today = todayISO()
+  const account = accountId ? state.accounts.find((a) => a.id === accountId) : undefined
+  const card = cardId ? state.cards.find((c) => c.id === cardId) : undefined
+  const current = account ? accountBalance(state, account.id) : (card?.invoice ?? 0)
+  const lastOn = account?.reconciledOn ?? card?.reconciledOn
+  const [real, setReal] = useState<number | null>(null)
+  const [typed, setTyped] = useState(0)
+  const diff = real === null ? 0 : Math.round((real - current) * 100) / 100
+  const label = account ? accountLabel(state, account.id) : card ? `${card.nickname} •• ${card.last4}` : ''
+  const money = (n: number) => privateMoney(brl(n), hidden)
+
+  if (!account && !card) return null
+
+  /** Grava a data da conferência. Devolve o que aplicar no estado (aplicado DEPOIS do lançamento). */
+  async function markChecked(value: number): Promise<() => void> {
+    if (account) {
+      const a = await accountsApi.update({ ...account, reconciledOn: today, reconciledBalance: value })
+      return () => dispatch({ type: 'saveAccount', account: a })
+    }
+    // Só a data: a fatura local recebe o lançamento pelo addTx logo depois (o banco já o incluiu)
+    const c = await cardsApi.update({ ...card!, reconciledOn: today, reconciledBalance: value })
+    return () => dispatch({ type: 'saveCard', card: { ...c, invoice: card!.invoice } })
+  }
+
+  async function choose(choice: ReconcileChoice) {
+    if (real === null) return
+    if (choice === 'esqueci') {
+      // Abre o formulário normal; a conferência fica para depois de lançar
+      openSheet({ type: 'add', kind: (account ? diff > 0 : diff < 0) ? 'income' : 'expense' })
+      return
+    }
+    const abs = Math.abs(diff)
+    let tx: Omit<Transaction, 'id'>
+    if (choice === 'rendimento') {
+      tx = { kind: 'income', name: 'Rendimento', category: 'receita_rendimentos', method: { type: 'pix' }, accountId: account!.id, date: today, amount: abs, source: 'manual' }
+    } else if (choice === 'tarifa') {
+      tx = card
+        ? { kind: 'expense', name: 'Juros ou tarifa', category: null, method: { type: 'card', cardId: card.id }, date: today, amount: abs, source: 'manual' }
+        : { kind: 'expense', name: 'Tarifa ou juros', category: null, method: { type: 'pix' }, accountId: account!.id, date: today, amount: abs, source: 'manual' }
+    } else {
+      tx = card
+        ? { kind: 'adjustment', name: 'Ajuste da fatura', category: null, method: { type: 'card', cardId: card.id }, date: today, amount: diff, source: 'manual' }
+        : { kind: 'adjustment', name: 'Ajuste de saldo', category: null, method: { type: 'pix' }, accountId: account!.id, date: today, amount: diff, source: 'manual' }
+    }
+    const ok = await run(
+      'save',
+      async () => {
+        const saved = await transactionsApi.create(tx)
+        const applyCheck = await markChecked(real)
+        return { saved, applyCheck }
+      },
+      ({ saved, applyCheck }) => {
+        // Primeiro a data (com a fatura de antes), depois o lançamento soma uma vez só
+        applyCheck()
+        dispatch({ type: 'addTx', tx: saved })
+      },
+      choice === 'rendimento' ? 'Rendimento lançado · conferido hoje' : choice === 'tarifa' ? 'Lançado · classifique a categoria depois' : 'Ajuste lançado · conferido hoje',
+    )
+    if (ok) close()
+  }
+
+  async function allGood() {
+    if (await run('save', () => markChecked(current), (apply) => apply(), 'Tudo certo · conferido hoje')) close()
+  }
+
+  const options: { id: ReconcileChoice; title: string; text: string }[] = []
+  if (real !== null && diff !== 0) {
+    const up = diff > 0
+    if (account) {
+      const rend = { id: 'rendimento' as const, title: 'Rendimento', text: `Entra como receita "Rendimentos" de ${money(Math.abs(diff))}.` }
+      const tar = { id: 'tarifa' as const, title: 'Tarifa ou juros', text: `Entra como gasto de ${money(Math.abs(diff))} (sem categoria, para você classificar).` }
+      if (up) options.push(rend)
+      else options.push(tar)
+    } else {
+      if (up) options.push({ id: 'tarifa', title: 'Juros ou tarifa', text: `Entra como gasto de ${money(Math.abs(diff))} no cartão (sem categoria, para você classificar).` })
+    }
+    options.push({ id: 'esqueci', title: 'Algo que esqueci de lançar', text: 'Abre o formulário para lançar direito. Depois, confira de novo.' })
+    options.push({
+      id: 'naosei',
+      title: 'Não sei',
+      text: `Cria um "Ajuste" de ${up ? '+' : '−'} ${money(Math.abs(diff))} no extrato. Não conta como gasto nem receita; dá para apagar depois.`,
+    })
+  }
+
+  return (
+    <Sheet title={card ? 'Conferir fatura' : 'Conferir saldo'} onClose={close}>
+      <div className="flex flex-col gap-5">
+        <p className="-mt-2 font-sat text-[13px] leading-[1.45] text-esk-muted">
+          {label} · no Okiva: <span className="text-white">{money(current)}</span>
+          {lastOn ? ` · última conferência em ${longDate(lastOn)}` : ' · nunca conferido'}
+        </p>
+        {real === null ? (
+          <form
+            className="flex flex-col gap-5"
+            onSubmit={(e) => {
+              e.preventDefault()
+              setReal(typed)
+            }}
+          >
+            <Field label={card ? 'Quanto está a fatura no app do banco?' : 'Quanto está no app do banco?'} htmlFor="rec-real">
+              <MoneyInput id="rec-real" value={typed} onChange={setTyped} large autoFocus />
+            </Field>
+            <PrimaryButton type="submit">Conferir</PrimaryButton>
+          </form>
+        ) : diff === 0 ? (
+          <div className="flex animate-rise flex-col gap-4">
+            <p className="rounded-[18px] bg-esk-lime/10 px-4 py-3 font-sat text-[15px] text-esk-lime ring-1 ring-esk-lime/30">Bateu certinho. Tudo certo!</p>
+            <PrimaryButton onClick={allGood} loading={pending === 'save'}>
+              Marcar como conferido
+            </PrimaryButton>
+          </div>
+        ) : (
+          <div className="flex animate-rise flex-col gap-4">
+            <p className="font-sat text-[15px] leading-[1.45] text-white">
+              {card ? 'A fatura no banco está' : 'O banco tem'} <span className={diff > 0 ? 'text-esk-positive' : 'text-esk-negative'}>{money(Math.abs(diff))} {diff > 0 ? 'a mais' : 'a menos'}</span>
+              {lastOn ? ` desde ${longDate(lastOn)}` : ''}. O que pode ser?
+            </p>
+            <ul className="flex flex-col gap-2">
+              {options.map((o) => (
+                <li key={o.id}>
+                  <button
+                    type="button"
+                    disabled={!!pending}
+                    onClick={() => choose(o.id)}
+                    className="flex w-full items-center gap-3 rounded-[20px] bg-esk-elevated px-4 py-3 text-left ring-1 ring-esk-track transition hover:bg-[#1f1f23] disabled:opacity-50"
+                  >
+                    <span className="flex min-w-0 flex-1 flex-col gap-[2px]">
+                      <span className="font-sat text-[15px] font-medium text-white">{o.title}</span>
+                      <span className="font-sat text-[12px] leading-[1.4] text-esk-subtle">{o.text}</span>
+                    </span>
+                    <ChevronRight size={16} className="shrink-0 text-esk-subtle" aria-hidden />
+                  </button>
+                </li>
+              ))}
+            </ul>
+            <button type="button" onClick={() => setReal(null)} className="self-start font-sat text-[14px] font-medium text-esk-muted hover:text-white">
+              Digitar outro valor
+            </button>
+          </div>
+        )}
+      </div>
     </Sheet>
   )
 }

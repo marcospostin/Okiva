@@ -22,6 +22,9 @@ export type Database = {
     Tables: {
       accounts: {
         Row: {
+          parent_id: string | null
+          reconciled_balance: number | null
+          reconciled_on: string | null
           created_at: string
           id: string
           kind: Database["public"]["Enums"]["account_kind"]
@@ -32,6 +35,9 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          parent_id?: string | null
+          reconciled_balance?: number | null
+          reconciled_on?: string | null
           created_at?: string
           id?: string
           kind?: Database["public"]["Enums"]["account_kind"]
@@ -42,6 +48,9 @@ export type Database = {
           user_id?: string
         }
         Update: {
+          parent_id?: string | null
+          reconciled_balance?: number | null
+          reconciled_on?: string | null
           created_at?: string
           id?: string
           kind?: Database["public"]["Enums"]["account_kind"]
@@ -101,6 +110,8 @@ export type Database = {
       }
       cards: {
         Row: {
+          reconciled_balance: number | null
+          reconciled_on: string | null
           opening_invoice: number
           started_on: string
           color: Database["public"]["Enums"]["card_color"]
@@ -116,6 +127,8 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          reconciled_balance?: number | null
+          reconciled_on?: string | null
           opening_invoice?: number
           started_on?: string
           color?: Database["public"]["Enums"]["card_color"]
@@ -131,6 +144,8 @@ export type Database = {
           user_id?: string
         }
         Update: {
+          reconciled_balance?: number | null
+          reconciled_on?: string | null
           opening_invoice?: number
           started_on?: string
           color?: Database["public"]["Enums"]["card_color"]
@@ -555,6 +570,7 @@ export type Database = {
       }
       transactions: {
         Row: {
+          transfer_account_id: string | null
           already_in_invoice: boolean
           account_id: string | null
           amount: number
@@ -577,6 +593,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          transfer_account_id?: string | null
           already_in_invoice?: boolean
           account_id?: string | null
           amount: number
@@ -599,6 +616,7 @@ export type Database = {
           user_id?: string
         }
         Update: {
+          transfer_account_id?: string | null
           already_in_invoice?: boolean
           account_id?: string | null
           amount?: number
@@ -741,7 +759,7 @@ export type Database = {
       card_color: "gradient" | "lilac" | "offwhite"
       goal_icon: "plane" | "shield" | "book" | "car" | "target"
       payment_method: "card" | "pix" | "cash"
-      tx_kind: "expense" | "income" | "invoice_payment"
+      tx_kind: "expense" | "income" | "invoice_payment" | "transfer" | "adjustment"
       tx_source: "manual" | "fatura"
     }
     CompositeTypes: {
@@ -874,7 +892,7 @@ export const Constants = {
       card_color: ["gradient", "lilac", "offwhite"],
       goal_icon: ["plane", "shield", "book", "car", "target"],
       payment_method: ["card", "pix", "cash"],
-      tx_kind: ["expense", "income", "invoice_payment"],
+      tx_kind: ["expense", "income", "invoice_payment", "transfer", "adjustment"],
       tx_source: ["manual", "fatura"],
     },
   },

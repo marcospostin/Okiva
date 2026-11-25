@@ -22,6 +22,7 @@ export function cardEffect(t: Transaction, today: string): { cardId: string; del
   const k = kindOf(t)
   if (k === 'expense') return { cardId: t.method.cardId, delta: t.amount }
   if (k === 'invoice_payment') return { cardId: t.method.cardId, delta: -t.amount }
+  if (k === 'adjustment') return { cardId: t.method.cardId, delta: t.amount }
   return null
 }
 
@@ -31,8 +32,25 @@ export function balanceEffect(t: Transaction, today: string) {
   const k = kindOf(t)
   if (k === 'income') return t.amount
   if (k === 'invoice_payment') return -t.amount
+  // Transferência só muda o dinheiro de lugar: o total não muda
+  if (k === 'transfer') return 0
+  // Ajuste: valor com sinal; no cartão mexe na fatura, não no saldo
+  if (k === 'adjustment') return t.method.type === 'card' ? 0 : t.amount
   return t.method.type === 'card' ? 0 : -t.amount
 }
+
+/** Quanto o lançamento mexe no saldo de UMA conta (transferência tira de uma e põe na outra). */
+export function accountEffect(t: Transaction, accountId: string, fallbackId: string | undefined, today: string) {
+  if (t.date > today) return 0
+  if (kindOf(t) === 'transfer') {
+    if (t.transferAccountId === accountId) return t.amount
+    return (t.accountId ?? fallbackId) === accountId ? -t.amount : 0
+  }
+  return (t.accountId ?? fallbackId) === accountId ? balanceEffect(t, today) : 0
+}
+
+/** Não é gasto nem receita: fica fora de teto, relatórios e totais do mês. */
+export const isMovement = (t: Pick<Transaction, 'kind'>) => kindOf(t) === 'transfer' || kindOf(t) === 'adjustment'
 
 /** Aplica (sign 1) ou desfaz (sign −1) o efeito de um lançamento na fatura do cartão. */
 export function adjustInvoice(cards: Card[], tx: Transaction, sign: 1 | -1, today: string) {

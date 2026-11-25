@@ -27,6 +27,8 @@ Especificação de negócio: [modelo-de-dados.md](modelo-de-dados.md) · contrat
 | `supabase/migrations/20261126120000_okiva_destacar_parceladas.sql` | criou `profiles.highlight_installments` (interruptor do bloco "Compras parceladas"); removida na etapa 12 |
 | `supabase/migrations/20261126150000_okiva_parceladas_sempre.sql` | remove a coluna: o bloco "Compras parceladas" aparece sempre que há parcela no mês |
 | `supabase/migrations/20261126180000_okiva_fatura_inicial_parcelas_andamento.sql` | `cards.opening_invoice` (fatura quando começou) e `started_on`; `transactions.already_in_invoice` (parcela que já está no valor informado/importado, não soma de novo); `save_ongoing_installments` (compra parcelada de antes do Okiva, da parcela atual em diante) |
+| `supabase/migrations/20261127120000_okiva_tipos_transferencia_ajuste.sql` | novos tipos de lançamento: `transfer` (mover dinheiro) e `adjustment` (ajuste da conferência) |
+| `supabase/migrations/20261127120100_okiva_subcontas_conferencia.sql` | subcontas (`accounts.parent_id`, um nível), `transactions.transfer_account_id`, ajuste com sinal (na conta mexe no saldo, no cartão na fatura), data da última conferência em contas e cartões; excluir subconta devolve tudo para a conta mãe |
 | `supabase/migrations/20261124180000_okiva_conta_suporte_seguranca.sql` | preferências de notificação, mensagens de suporte e confirmação por e-mail para apagar dados |
 | `supabase/templates/*.html` | e-mails em português (cadastro, código de confirmação, redefinir senha, trocar e-mail): colar no dashboard |
 | `supabase/seed.sql` | **seed temporário** da conta demo (mocks) |

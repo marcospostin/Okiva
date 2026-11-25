@@ -12,7 +12,7 @@
  * Tipo:    "receita" · "gasto" · "pagamento" (de fatura)
  */
 import { categoryMeta } from '../data/categories'
-import { accountName, methodLabel } from '../state/store'
+import { accountLabel, methodLabel } from '../state/store'
 import type { AppState, Transaction } from '../types'
 import { incomeLabel, kindOf } from './ledger'
 
@@ -34,10 +34,18 @@ function textOf(state: AppState, t: Transaction) {
   const [y, m, d] = t.date.split('-')
   const parts = [
     t.name,
-    k === 'income' ? `receita entrada ${incomeLabel(t.category)}` : k === 'invoice_payment' ? 'pagamento de fatura' : `gasto despesa saida`,
+    k === 'income'
+      ? `receita entrada ${incomeLabel(t.category)}`
+      : k === 'invoice_payment'
+        ? 'pagamento de fatura'
+        : k === 'transfer'
+          ? `transferencia mover guardar resgatar ${accountLabel(state, t.accountId)} ${accountLabel(state, t.transferAccountId)}`
+          : k === 'adjustment'
+            ? 'ajuste conferencia conferir'
+            : `gasto despesa saida`,
     k === 'expense' ? (t.category === null ? 'sem categoria' : categoryMeta(state, t.category).label) : '',
     methodLabel(state, t),
-    k !== 'expense' || t.method.type !== 'card' ? accountName(state, t.accountId) : '',
+    t.method.type !== 'card' ? accountLabel(state, t.accountId) : '',
     t.method.type === 'card' ? 'cartao credito' : '',
     t.recurrenceId ? 'recorrente mensal' : '',
     t.installment ? `parcela parcelado ${t.installment.number}/${t.installment.total}` : '',

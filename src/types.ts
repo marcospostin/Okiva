@@ -24,7 +24,8 @@ export interface CustomCategory {
 export type PaymentMethod = { type: 'card'; cardId: string } | { type: 'pix' } | { type: 'cash' }
 
 /** expense = gasto · income = receita (soma no saldo) · invoice_payment = pagamento de fatura do cartão */
-export type TxKind = 'expense' | 'income' | 'invoice_payment'
+/** transfer = mover dinheiro entre contas; adjustment = ajuste da conferência (valor com sinal) */
+export type TxKind = 'expense' | 'income' | 'invoice_payment' | 'transfer' | 'adjustment'
 
 /** Origem de uma receita (não é categoria de gasto e não tem teto) */
 export type IncomeSource = 'receita_salario' | 'receita_extra' | 'receita_rendimentos' | 'receita_reembolso' | 'receita_outros'
@@ -47,8 +48,10 @@ export interface Transaction {
   category: CategoryId | null
   /** Receita ignora o método (o dinheiro entra em accountId) */
   method: PaymentMethod
-  /** Conta de onde o dinheiro sai (Pix, dinheiro, pagamento de fatura) ou onde entra (receita) */
+  /** Conta de onde o dinheiro sai (Pix, dinheiro, pagamento de fatura, transferência) ou onde entra (receita) */
   accountId?: string
+  /** Transferência: conta que recebe */
+  transferAccountId?: string
   /** ISO date (yyyy-mm-dd). Parcelas futuras têm data no futuro. */
   date: string
   /** Positive number; the sign comes from `kind` */
@@ -101,6 +104,9 @@ export interface Card {
   openingInvoice: number
   /** yyyy-mm-dd em que o cartão entrou no Okiva (parcelas até esse mês já estavam na fatura inicial) */
   startedOn?: string
+  /** Última conferência da fatura com o banco */
+  reconciledOn?: string
+  reconciledBalance?: number
   limit: number
   /** Day of month the invoice is due */
   dueDay: number
@@ -161,6 +167,11 @@ export interface Account {
   name: string
   kind: AccountKind
   startingBalance: number
+  /** Subconta (poupança, caixinha… nome livre) desta conta. Um nível só. */
+  parentId?: string
+  /** Última conferência com o banco (yyyy-mm-dd) e o saldo informado nela */
+  reconciledOn?: string
+  reconciledBalance?: number
 }
 
 /** Regra "todo mês, no dia X". O lançamento só é criado quando a data chega. */

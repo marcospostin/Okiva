@@ -1,9 +1,10 @@
-import { ArrowDownLeft, Check, ChevronDown, ChevronLeft, ChevronRight, CircleHelp, CreditCard, Repeat, Sparkles } from 'lucide-react'
+import { ArrowDownLeft, ArrowLeftRight, Check, ChevronDown, ChevronLeft, ChevronRight, CircleHelp, CreditCard, Repeat, Scale, Sparkles } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { categoryMeta, UNCATEGORIZED } from '../data/categories'
 import { Asset, CategoryRowIcon, CategoryTileIcon } from '../components/icons'
 import { Avatar, CountUp, cx, Page, SearchField, SearchSummary } from '../components/ui'
 import { searchTransactions } from '../lib/search'
+import { movementAmount, movementSubtitle } from '../lib/movements'
 import { InstallmentsBlock } from '../components/InstallmentsBlock'
 import { brl, brlShort, capitalize, privateExpense, privateIncome, privateMoney, monthName, pct, relativeDay } from '../lib/format'
 import { incomeLabel, kindOf } from '../lib/ledger'
@@ -17,6 +18,7 @@ import {
   monthSummary,
   previousMonth,
   accountName,
+  topAccounts,
   uncategorized,
   useStore,
 } from '../state/store'
@@ -115,6 +117,8 @@ function TxRowIcon({ t }: { t: Transaction }) {
   const k = kindOf(t)
   if (k === 'income') return <ArrowDownLeft size={20} strokeWidth={1.7} className="text-esk-lime" aria-hidden />
   if (k === 'invoice_payment') return <CreditCard size={19} strokeWidth={1.6} className="text-esk-text-2" aria-hidden />
+  if (k === 'transfer') return <ArrowLeftRight size={19} strokeWidth={1.6} className="text-esk-text-2" aria-hidden />
+  if (k === 'adjustment') return <Scale size={19} strokeWidth={1.6} className="text-esk-text-2" aria-hidden />
   return <CategoryRowIcon category={t.category} name={t.name} />
 }
 
@@ -376,7 +380,7 @@ export default function Home() {
                 >
                   <Asset name="009b2.svg" size={15} />
                   <span className="font-inter-m text-[12px] font-medium text-esk-ink">
-                    {state.accounts.length > 1 ? `${state.accounts.length} contas` : 'Ver contas'}
+                    {topAccounts(state).length > 1 ? `${topAccounts(state).length} contas` : 'Ver contas'}
                   </span>
                   <ChevronRight size={13} strokeWidth={2.2} className="text-esk-ink transition group-hover:translate-x-0.5" aria-hidden />
                 </button>
@@ -757,7 +761,9 @@ export default function Home() {
                             {t.recurrenceId && <Repeat size={12} className="shrink-0 text-esk-muted" aria-label="recorrente" />}
                           </span>
                           <span className="truncate font-inter text-[9px] text-esk-muted md:text-[11px]">
-                            {k === 'income'
+                            {k === 'transfer' || k === 'adjustment'
+                              ? movementSubtitle(state, t)
+                              : k === 'income'
                               ? `${incomeLabel(t.category)} · ${accountName(state, t.accountId)}`
                               : k === 'invoice_payment'
                                 ? `Pagamento de fatura · ${accountName(state, t.accountId)}`
@@ -774,8 +780,17 @@ export default function Home() {
                           </span>
                         </span>
                         <span className="flex shrink-0 flex-col items-end gap-[3px] leading-[1.4] whitespace-nowrap">
-                          <span className={cx('font-inter-m text-[12px] font-medium tracking-[-0.24px] md:text-[14px]', k === 'income' ? 'text-esk-positive' : 'text-esk-negative')}>
-                            {k === 'income' ? privateIncome(t.amount, hidden) : privateExpense(t.amount, hidden)}
+                          <span
+                            className={cx(
+                              'font-inter-m text-[12px] font-medium tracking-[-0.24px] md:text-[14px]',
+                              k === 'transfer' || k === 'adjustment' ? 'text-esk-text-2' : k === 'income' ? 'text-esk-positive' : 'text-esk-negative',
+                            )}
+                          >
+                            {k === 'transfer' || k === 'adjustment'
+                              ? movementAmount(t, hidden)
+                              : k === 'income'
+                                ? privateIncome(t.amount, hidden)
+                                : privateExpense(t.amount, hidden)}
                           </span>
                           <span className="font-inter text-[10px] text-esk-muted md:text-[11px]">{ahead ? `prevista ${dayLabel(t.date)}` : dayLabel(t.date)}</span>
                         </span>

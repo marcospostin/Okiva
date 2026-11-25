@@ -73,6 +73,7 @@ export const toTx = (r: Row<'transactions'>): Transaction => ({
   category: r.category,
   method: toMethod(r.method_type, r.card_id),
   accountId: r.account_id ?? undefined,
+  transferAccountId: r.transfer_account_id ?? undefined,
   date: r.date,
   amount: num(r.amount),
   source: r.source,
@@ -91,14 +92,23 @@ const fromTx = (t: TransactionInput) => ({
   category: t.category,
   method_type: t.method.type,
   card_id: t.method.type === 'card' ? t.method.cardId : null,
-  account_id: t.method.type === 'card' && (t.kind ?? 'expense') === 'expense' ? null : (t.accountId ?? null),
+  account_id: t.method.type === 'card' && ['expense', 'adjustment'].includes(t.kind ?? 'expense') ? null : (t.accountId ?? null),
+  transfer_account_id: (t.kind ?? 'expense') === 'transfer' ? (t.transferAccountId ?? null) : null,
   date: t.date,
   amount: t.amount,
   source: t.source,
   invoice_id: t.invoiceId ?? null,
 })
 
-const toAccount = (r: Row<'accounts'>): Account => ({ id: r.id, name: r.name, kind: r.kind, startingBalance: num(r.starting_balance) })
+const toAccount = (r: Row<'accounts'>): Account => ({
+  id: r.id,
+  name: r.name,
+  kind: r.kind,
+  startingBalance: num(r.starting_balance),
+  parentId: r.parent_id ?? undefined,
+  reconciledOn: r.reconciled_on ?? undefined,
+  reconciledBalance: r.reconciled_balance === null ? undefined : num(r.reconciled_balance),
+})
 
 const toRecurrence = (r: Row<'recurrences'>): Recurrence => ({
   id: r.id,
@@ -135,6 +145,8 @@ export const toCard = (r: Row<'cards'>): Card => ({
   invoice: num(r.invoice),
   openingInvoice: num(r.opening_invoice),
   startedOn: r.started_on,
+  reconciledOn: r.reconciled_on ?? undefined,
+  reconciledBalance: r.reconciled_balance === null ? undefined : num(r.reconciled_balance),
   limit: num(r.limit),
   dueDay: r.due_day,
 })
@@ -358,7 +370,16 @@ export const sbCardsApi = {
         sb()
           .from('cards')
           // A fatura em si não vai: o banco a desloca pela diferença da fatura inicial
-          .update({ nickname: card.nickname, last4: card.last4, limit: card.limit, opening_invoice: card.openingInvoice, due_day: card.dueDay, color: card.color })
+          .update({
+            nickname: card.nickname,
+            last4: card.last4,
+            limit: card.limit,
+            opening_invoice: card.openingInvoice,
+            due_day: card.dueDay,
+            color: card.color,
+            reconciled_on: card.reconciledOn ?? null,
+            reconciled_balance: card.reconciledBalance ?? null,
+          })
           .eq('id', card.id)
           .select()
           .single(),
@@ -471,9 +492,32 @@ export const sbRulesApi = {
 
 export const sbAccountsApi = {
   create: async (input: AccountInput) =>
-    toAccount(await run(sb().from('accounts').insert({ name: input.name, kind: input.kind, starting_balance: input.startingBalance }).select().single())),
+    toAccount(
+      await run(
+        sb()
+          .from('accounts')
+          .insert({ name: input.name, kind: input.kind, starting_balance: input.startingBalance, parent_id: input.parentId ?? null })
+          .select()
+          .single(),
+      ),
+    ),
   update: async (a: Account) =>
-    toAccount(await run(sb().from('accounts').update({ name: a.name, kind: a.kind, starting_balance: a.startingBalance }).eq('id', a.id).select().single())),
+    toAccount(
+      await run(
+        sb()
+          .from('accounts')
+          .update({
+            name: a.name,
+            kind: a.kind,
+            starting_balance: a.startingBalance,
+            reconciled_on: a.reconciledOn ?? null,
+            reconciled_balance: a.reconciledBalance ?? null,
+          })
+          .eq('id', a.id)
+          .select()
+          .single(),
+      ),
+    ),
   remove: async (id: string) => {
     await run(sb().from('accounts').delete().eq('id', id))
   },

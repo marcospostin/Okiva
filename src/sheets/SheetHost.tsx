@@ -20,7 +20,7 @@ import {
   SecuritySheet,
   VerifyActionSheet,
 } from './SettingsSheets'
-import { BankAccountSheet, CapAlertSheet, CategorizeSheet, ReportDetailSheet, ConfirmDelete, EditEntrySheet, EntrySheet, OngoingInstallmentSheet, PayInvoiceSheet, RecurrenceSheet, TransactionSheet, useLast } from './MoneySheets'
+import { BankAccountSheet, CapAlertSheet, CategorizeSheet, ReportDetailSheet, ConfirmDelete, EditEntrySheet, EntrySheet, OngoingInstallmentSheet, PayInvoiceSheet, ReconcileSheet, TransferSheet, RecurrenceSheet, TransactionSheet, useLast } from './MoneySheets'
 import type { CategoryId, Goal } from '../types'
 
 export default function SheetHost() {
@@ -40,7 +40,11 @@ function SheetSwitch({ sheet, close }: { sheet: SheetState; close: () => void })
     case 'payInvoice':
       return <PayInvoiceSheet close={close} cardId={sheet.cardId} id={sheet.id} />
     case 'bankAccount':
-      return <BankAccountSheet close={close} id={sheet.id} />
+      return <BankAccountSheet close={close} id={sheet.id} parentId={sheet.parentId} />
+    case 'transfer':
+      return <TransferSheet close={close} id={sheet.id} from={sheet.from} to={sheet.to} />
+    case 'reconcile':
+      return <ReconcileSheet close={close} accountId={sheet.accountId} cardId={sheet.cardId} />
     case 'recurrence':
       return <RecurrenceSheet close={close} id={sheet.id} />
     case 'reportDetail':

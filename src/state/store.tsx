@@ -5,7 +5,7 @@ import { savePrefs } from '../services/supabaseApi'
 import { DEMO_USER, initialState, TODAY } from '../data/mock'
 import { restoreSession, sessionEmail, signOut } from '../services/auth'
 import { monthKey, toISO } from '../lib/format'
-import { adjustInvoice, balanceEffect, ensureAccounts, isExpense, kindOf, processDueLocal, round2 } from '../lib/ledger'
+import { accountEffect, adjustInvoice, balanceEffect, ensureAccounts, isExpense, kindOf, processDueLocal, round2 } from '../lib/ledger'
 import type { Account, AppState, Budget, CapAlert, Card, CategoryId, CategoryRule, CustomCategory, Goal, GoalDeposit, InvoiceImport, NotificationPrefs, Recurrence, Stage, Transaction, User } from '../types'
 
 /** Each account keeps its own data: okiva:data:<email> */
@@ -149,13 +149,19 @@ function reducer(state: AppState, action: Action): AppState {
       const gone = state.accounts.find((a) => a.id === action.id)
       if (!gone) return state
       const rest = state.accounts.filter((a) => a.id !== action.id)
-      const target = rest[0]
+      // Subconta devolve tudo para a conta mãe; conta principal, para a primeira principal que sobrar
+      const target = gone.parentId ? rest.find((a) => a.id === gone.parentId) : rest.find((a) => !a.parentId)
       if (!target) return { ...state, accounts: rest }
+      const between = (t: Transaction) =>
+        kindOf(t) === 'transfer' &&
+        ((t.accountId === gone.id && t.transferAccountId === target.id) || (t.accountId === target.id && t.transferAccountId === gone.id))
       const move = <T extends { accountId?: string }>(x: T): T => (x.accountId === gone.id ? { ...x, accountId: target.id } : x)
       return {
         ...state,
         accounts: rest.map((a) => (a.id === target.id ? { ...a, startingBalance: round2(a.startingBalance + gone.startingBalance) } : a)),
-        transactions: state.transactions.map(move),
+        transactions: state.transactions
+          .filter((t) => !between(t))
+          .map((t) => move(t.transferAccountId === gone.id ? { ...t, transferAccountId: target.id } : t)),
         recurrences: state.recurrences.map(move),
       }
     }
@@ -215,11 +221,14 @@ function reducer(state: AppState, action: Action): AppState {
         ...state,
         cards: state.cards.filter((c) => c.id !== action.id),
         cardOrder: state.cardOrder.filter((id) => id !== action.id),
-        transactions: state.transactions.map((t) =>
-          t.method.type === 'card' && t.method.cardId === action.id
-            ? { ...t, kind: kindOf(t) === 'invoice_payment' ? 'expense' : t.kind, method: { type: 'cash' } }
-            : t,
-        ),
+        transactions: state.transactions
+          // Ajuste da fatura só valia para este cartão
+          .filter((t) => !(kindOf(t) === 'adjustment' && t.method.type === 'card' && t.method.cardId === action.id))
+          .map((t) =>
+            t.method.type === 'card' && t.method.cardId === action.id
+              ? { ...t, kind: kindOf(t) === 'invoice_payment' ? 'expense' : t.kind, method: { type: 'cash' } }
+              : t,
+          ),
         recurrences: state.recurrences.map((r) => (r.method.type === 'card' && r.method.cardId === action.id ? { ...r, method: { type: 'cash' } } : r)),
         // Imported invoices stay in the history, no longer tied to a card
         invoices: state.invoices.map((i) => (i.cardId === action.id ? { ...i, cardId: null, previousInvoice: null } : i)),
@@ -457,24 +466,49 @@ export function balanceOf(state: AppState) {
   return round2((state.startingBalance ?? 0) + starts + state.transactions.reduce((s, t) => s + balanceEffect(t, today), 0))
 }
 
-/** Saldo de uma conta. Lançamentos sem conta (dados antigos) contam na primeira. */
+/** Saldo de uma conta (só ela, sem as subcontas). Lançamentos sem conta (dados antigos) contam na primeira. */
 export function accountBalance(state: AppState, accountId: string) {
   const today = todayISO()
   const account = state.accounts.find((a) => a.id === accountId)
   if (!account) return 0
-  return round2(account.startingBalance + accountTransactions(state, accountId).reduce((s, t) => s + balanceEffect(t, today), 0))
+  const first = state.accounts[0]?.id
+  return round2(account.startingBalance + accountTransactions(state, accountId).reduce((s, t) => s + accountEffect(t, accountId, first, today), 0))
 }
 
-/** Lançamentos que movimentaram a conta (mais recentes primeiro). Gasto no cartão não passa pela conta. */
+/** Saldo da conta somando as subcontas (o número grande do cartão da conta). */
+export function accountTotal(state: AppState, accountId: string) {
+  return round2(accountBalance(state, accountId) + subaccounts(state, accountId).reduce((s, a) => s + accountBalance(state, a.id), 0))
+}
+
+/** Contas principais (sem as subcontas), na ordem salva. */
+export const topAccounts = (state: AppState) => state.accounts.filter((a) => !a.parentId)
+
+/** Subcontas (poupança, caixinhas…) de uma conta. */
+export const subaccounts = (state: AppState, accountId: string) => state.accounts.filter((a) => a.parentId === accountId)
+
+/** Lançamentos que movimentaram a conta (mais recentes primeiro). Gasto e ajuste no cartão não passam pela conta. */
 export function accountTransactions(state: AppState, accountId: string) {
   const first = state.accounts[0]?.id
   return state.transactions
-    .filter((t) => (kindOf(t) !== 'expense' || t.method.type !== 'card') && (t.accountId ?? first) === accountId)
+    .filter((t) => {
+      const k = kindOf(t)
+      if (k === 'transfer') return t.transferAccountId === accountId || (t.accountId ?? first) === accountId
+      if ((k === 'expense' || k === 'adjustment') && t.method.type === 'card') return false
+      return (t.accountId ?? first) === accountId
+    })
     .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0))
 }
 
 export function accountName(state: AppState, id?: string) {
   return state.accounts.find((a) => a.id === id)?.name ?? state.accounts[0]?.name ?? 'Conta'
+}
+
+/** "Nubank · Caixinha 01" para subconta; o nome sozinho para conta principal. */
+export function accountLabel(state: AppState, id?: string) {
+  const a = state.accounts.find((x) => x.id === id)
+  if (!a) return accountName(state, id)
+  const parent = a.parentId ? state.accounts.find((x) => x.id === a.parentId) : undefined
+  return parent ? `${parent.name} · ${a.name}` : a.name
 }
 
 export interface MonthSummary {

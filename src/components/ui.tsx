@@ -117,8 +117,9 @@ export function RoundButton({
 }
 
 /** Screen title row: back + title + one action. Satoshi Medium 29. */
-export function ScreenHeader({ title, action }: { title: string; action?: ReactNode }) {
-  const { back } = useUI()
+export function ScreenHeader({ title, action, onBack }: { title: string; action?: ReactNode; onBack?: () => void }) {
+  const { back: goBack } = useUI()
+  const back = onBack ?? goBack
   return (
     <header className="flex items-center justify-between gap-3 pt-[20px] md:pt-10">
       <div className="flex min-w-0 items-center gap-3">

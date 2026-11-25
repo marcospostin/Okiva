@@ -122,6 +122,7 @@ export default function Cards() {
                   <p className="font-sat text-[12px] text-esk-subtle">Os gastos no cartão saem do saldo quando você paga a fatura.</p>
                   <div className="flex flex-wrap gap-x-5 gap-y-2">
                     <LinkButton onClick={() => openSheet({ type: 'card', id: front.id })}>Editar {front.nickname}</LinkButton>
+                    <LinkButton onClick={() => openSheet({ type: 'reconcile', cardId: front.id })}>Conferir fatura</LinkButton>
                     <LinkButton onClick={() => openSheet({ type: 'ongoing', cardId: front.id })}>Compra parcelada de antes do Okiva</LinkButton>
                   </div>
                 </div>
