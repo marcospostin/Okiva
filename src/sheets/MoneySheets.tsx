@@ -785,7 +785,7 @@ export function BankAccountSheet({ close, id, parentId }: { close: () => void; i
           <input
             id="accname"
             className={inputClass}
-            placeholder={isSub ? 'Poupança, Caixinha viagem, Reserva…' : 'Nubank, Itaú, Carteira…'}
+            placeholder={isSub ? 'Poupança, Caixinha viagem, Reserva…' : 'Nubank, Itaú, Dinheiro em espécie…'}
             value={name}
             onChange={(e) => setName(e.target.value)}
             maxLength={30}

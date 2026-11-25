@@ -3,16 +3,16 @@
 -- =============================================================================
 -- Lucas: renda de R$ 7.000, teto de R$ 7.000, gasta ~R$ 4.800/mês e guarda o resto.
 -- Mostra tudo o que o app faz, já preenchido:
---   contas e subcontas    Nubank (+ "Reserva de emergência", "Caixinha viagem" e "Caixinha imóvel") e Carteira
+--   contas e subcontas    Nubank (+ "Reserva de emergência", "Caixinha viagem" e "Caixinha imóvel") e Dinheiro em espécie
 --   cartões               Nubank, Inter e XP; faturas pagas todo mês; fatura do mês aberta
 --   recorrências          salário, aluguel R$ 1.700, plano de saúde, internet, academia, streaming
 --   compras parceladas    Notebook 10× e passagem aérea 6× (parcelas futuras já lançadas)
 --   mover dinheiro        R$ 500/mês para a reserva, R$ 300/mês para a viagem e R$ 1.500/mês para o imóvel
 --   rendimento            todo mês na reserva
---   sem categoria         1 gasto para mostrar "Classificar"
+--   sem categoria         3 gastos para mostrar "Classificar"
 --   fatura lida pela IA   fatura de outubro do Inter
 --   conferência           reserva e conta conferidas com o banco
---   metas                 "Imóvel próprio" (R$ 200 mil, R$ 1.500/mês), viagem e curso
+--   metas                 "Imóvel próprio" (R$ 200 mil, R$ 1.500/mês), viagem e Playstation 5
 -- 4 meses de histórico (relatórios "Mês a mês"). Valores variam um pouco por mês.
 -- =============================================================================
 
@@ -53,7 +53,7 @@ begin
   insert into public.accounts (user_id, name, kind, starting_balance, parent_id) values (v_uid, 'Reserva de emergência', 'savings', 0, v_acc) returning id into v_reserva;
   insert into public.accounts (user_id, name, kind, starting_balance, parent_id) values (v_uid, 'Caixinha viagem', 'savings', 0, v_acc) returning id into v_viagem;
   insert into public.accounts (user_id, name, kind, starting_balance, parent_id) values (v_uid, 'Caixinha imóvel', 'savings', 0, v_acc) returning id into v_casa;
-  insert into public.accounts (user_id, name, kind, starting_balance) values (v_uid, 'Carteira', 'wallet', 0) returning id into v_carteira;
+  insert into public.accounts (user_id, name, kind, starting_balance) values (v_uid, 'Dinheiro em espécie', 'wallet', 0) returning id into v_carteira;
 
   -- ------------------------------------------------------------ cartões (no Okiva há 4 meses)
   insert into public.cards (user_id, nickname, last4, color, opening_invoice, "limit", due_day, position, started_on)
@@ -72,7 +72,8 @@ begin
       select * from (values
         ('Mercado', 'alimentacao', 'nu', 3, 212.40), ('Mercado', 'alimentacao', 'nu', 11, 186.90),
         ('Mercado', 'alimentacao', 'nu', 19, 238.70), ('Mercado', 'alimentacao', 'nu', 26, 164.30),
-        ('Padaria', 'alimentacao', 'cash', 7, 38.50), ('Padaria', 'alimentacao', 'cash', 21, 42.00),
+        ('Padaria', 'alimentacao', 'cash', 7, 38.50), ('Feira livre', 'alimentacao', 'cash', 14, 56.00),
+        ('Pastelaria', 'alimentacao', 'cash', 21, 24.00), ('Barbearia', 'outros', 'cash', 25, 50.00),
         ('iFood', 'alimentacao', 'inter', 6, 62.90), ('iFood', 'alimentacao', 'inter', 14, 48.50),
         ('iFood', 'alimentacao', 'inter', 23, 74.80), ('Restaurante', 'alimentacao', 'nu', 17, 146.00),
         ('Uber', 'transporte', 'inter', 4, 27.90), ('Uber', 'transporte', 'inter', 12, 34.60),
@@ -103,6 +104,9 @@ begin
   -- Um gasto que o Okiva não reconheceu: mostra o "Classificar"
   insert into public.transactions (user_id, name, category, method_type, card_id, date, amount, source, kind)
   values (v_uid, 'PAG*JOSEDASILVA', null, 'card', v_nu, greatest(v_month, v_today - 2), 35.00, 'manual', 'expense');
+  insert into public.transactions (user_id, name, category, method_type, card_id, account_id, date, amount, source, kind) values
+    (v_uid, 'PIX QRS 4471-AB', null, 'pix', null, v_acc, greatest(v_month, v_today - 1), 18.50, 'manual', 'expense'),
+    (v_uid, 'EC *MP*LOJA3421', null, 'card', v_inter, null, greatest(v_month, v_today - 4), 64.90, 'manual', 'expense');
 
   -- ------------------------------------------------------------ recorrências (já geradas até hoje)
   for r in
@@ -228,7 +232,7 @@ begin
   values (v_uid, 'Viagem para Portugal', 15000, 2000, to_char(v_month + interval '10 months', 'YYYY-MM'), 'plane', to_char(v_month - interval '10 months', 'YYYY-MM'), now() - interval '2 seconds')
   returning id into v_portugal;
   insert into public.goals (user_id, name, target, saved, icon, started_at, created_at)
-  values (v_uid, 'Curso de inglês', 4800, 600, 'book', to_char(v_month - interval '8 months', 'YYYY-MM'), now() - interval '1 second')
+  values (v_uid, 'Playstation 5', 4500, 600, 'target', to_char(v_month - interval '8 months', 'YYYY-MM'), now() - interval '1 second')
   returning id into v_ingles;
 
   insert into public.goal_deposits (user_id, goal_id, amount, date)

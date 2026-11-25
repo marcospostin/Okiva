@@ -81,10 +81,14 @@ export default function Accounts() {
                     </span>
                     <span className="flex min-w-0 flex-1 flex-col">
                       <span className="truncate font-sat text-[17px] font-medium text-white">{a.name}</span>
-                      <span className="font-sat text-[12px] text-esk-subtle">
-                        {accountKindLabel(a.kind)}
-                        {subs.length > 0 && ` · ${subs.length} ${subs.length === 1 ? 'subconta' : 'subcontas'}`}
-                      </span>
+                      {/* Tipo embaixo do nome, menos quando o nome já é o tipo ("Dinheiro em espécie") */}
+                      {(a.name !== accountKindLabel(a.kind) || subs.length > 0) && (
+                        <span className="font-sat text-[12px] text-esk-subtle">
+                          {[a.name !== accountKindLabel(a.kind) && accountKindLabel(a.kind), subs.length > 0 && `${subs.length} ${subs.length === 1 ? 'subconta' : 'subcontas'}`]
+                            .filter(Boolean)
+                            .join(' · ')}
+                        </span>
+                      )}
                     </span>
                     <span className="shrink-0 font-sat text-[17px] font-medium text-white">{privateMoney(brl(accountTotal(state, a.id)), hidden)}</span>
                     <ChevronRight size={16} className="shrink-0 text-esk-subtle" aria-hidden />
@@ -120,7 +124,7 @@ export default function Accounts() {
               </span>
               <span className="flex flex-col">
                 <span className="font-sat text-[15px] font-medium text-white">Nova conta</span>
-                <span className="font-sat text-[12px] text-esk-subtle">Banco ou carteira. Poupança e caixinhas ficam dentro da conta.</span>
+                <span className="font-sat text-[12px] text-esk-subtle">Banco ou dinheiro em espécie. Poupança e caixinhas ficam dentro da conta.</span>
               </span>
             </button>
           </section>

@@ -224,7 +224,7 @@ export function addDays(iso: string, days: number) {
 export const ACCOUNT_KINDS: { id: Account['kind']; label: string }[] = [
   { id: 'checking', label: 'Conta corrente' },
   { id: 'savings', label: 'Poupança' },
-  { id: 'wallet', label: 'Carteira' },
+  { id: 'wallet', label: 'Dinheiro em espécie' },
 ]
 export const accountKindLabel = (k: Account['kind']) => ACCOUNT_KINDS.find((x) => x.id === k)?.label ?? 'Conta'
 
