@@ -8,7 +8,7 @@ import { movementAmount, movementSubtitle } from '../lib/movements'
 import { InstallmentsBlock } from '../components/InstallmentsBlock'
 import { brl, brlShort, capitalize, privateExpense, privateIncome, privateMoney, monthName, pct, relativeDay } from '../lib/format'
 import { incomeLabel, kindOf } from '../lib/ledger'
-import { TODAY } from '../data/mock'
+import { today } from '../data/mock'
 import { toISO } from '../lib/format'
 import {
   availableMonths,
@@ -228,6 +228,14 @@ export default function Home() {
   useEffect(() => {
     if (!months.includes(month)) setMonth(currentMonth())
   }, [months, month])
+  // Virou o mês com o app aberto: quem estava no mês atual passa para o novo (outra escolha fica)
+  const nowMonth = currentMonth()
+  const lastNowMonth = useRef(nowMonth)
+  useEffect(() => {
+    if (lastNowMonth.current === nowMonth) return
+    setMonth((m) => (m === lastNowMonth.current ? nowMonth : m))
+    lastNowMonth.current = nowMonth
+  }, [nowMonth])
   const balance = balanceOf(state)
   const plus = state.stage === 2
   const hidden = state.hideBalance
@@ -236,7 +244,7 @@ export default function Home() {
   const available = state.budget.total - summary.total
   const budgetUsed = pct(summary.total, state.budget.total)
   const variation = summary.previousTotal ? pct(summary.total - summary.previousTotal, summary.previousTotal) : null
-  const todayKey = toISO(TODAY)
+  const todayKey = toISO(today())
   // Busca: procura em todos os meses (não só no escolhido)
   const [query, setQuery] = useState('')
   const searching = query.trim().length > 0
@@ -250,7 +258,7 @@ export default function Home() {
   const txs = showAll ? listSource : listSource.slice(0, listLimit)
   const thisYear = todayKey.slice(0, 4)
   const dayLabel = (iso: string) => {
-    const base = relativeDay(iso, TODAY)
+    const base = relativeDay(iso, today())
     return searching && iso.slice(0, 4) !== thisYear ? `${base} ${iso.slice(0, 4)}` : base
   }
 

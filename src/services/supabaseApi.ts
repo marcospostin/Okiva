@@ -52,6 +52,25 @@ async function run<R extends { data: unknown; error: PostgrestError | null }>(qu
   return data as NonNullable<R['data']>
 }
 
+/** O Supabase devolve no máximo 1000 linhas por consulta (max_rows). */
+const PAGE = 1000
+
+/**
+ * Busca todas as linhas, de 1000 em 1000, até vir uma página incompleta. Sem isso, quem passa de
+ * 1000 lançamentos perdia os mais antigos da tela (e o saldo calculado no app ficava errado).
+ * A consulta precisa de uma ordem estável (termine com .order('id')) para as páginas não se repetirem.
+ */
+async function all<R extends { data: unknown[] | null; error: PostgrestError | null }>(
+  page: (from: number, to: number) => PromiseLike<R>,
+): Promise<NonNullable<R['data']>> {
+  const out: unknown[] = []
+  for (let from = 0; ; from += PAGE) {
+    const rows = await run(page(from, from + PAGE - 1))
+    out.push(...rows)
+    if (rows.length < PAGE) return out as NonNullable<R['data']>
+  }
+}
+
 async function uid(): Promise<string> {
   const { data } = await sb().auth.getSession()
   const id = data.session?.user.id
@@ -222,16 +241,24 @@ export async function loadAccount(): Promise<AppState> {
   if (due.error) console.warn('process_due', due.error.message)
   const [profile, cards, txs, goals, deposits, caps, categories, invoices, accounts, recurrences, rules] = await Promise.all([
     run(db.from('profiles').select('*').eq('id', me).single()),
-    run(db.from('cards').select('*').eq('user_id', me).order('position', { ascending: true })),
-    run(db.from('transactions').select('*').eq('user_id', me).order('date', { ascending: false }).order('created_at', { ascending: false })),
-    run(db.from('goals').select('*').eq('user_id', me).order('created_at', { ascending: true })),
-    run(db.from('goal_deposits').select('*').eq('user_id', me).order('date', { ascending: false })),
-    run(db.from('budget_caps').select('*').eq('user_id', me)),
-    run(db.from('categories').select('*').eq('user_id', me).order('position', { ascending: true }).order('created_at', { ascending: true })),
-    run(db.from('invoice_imports').select('*').eq('user_id', me).order('imported_at', { ascending: false }).order('created_at', { ascending: false })),
-    run(db.from('accounts').select('*').eq('user_id', me).order('position', { ascending: true }).order('created_at', { ascending: true })),
-    run(db.from('recurrences').select('*').eq('user_id', me).order('created_at', { ascending: true })),
-    run(db.from('category_rules').select('*').eq('user_id', me)),
+    all((a, b) => db.from('cards').select('*').eq('user_id', me).order('position', { ascending: true }).order('id').range(a, b)),
+    all((a, b) =>
+      db.from('transactions').select('*').eq('user_id', me).order('date', { ascending: false }).order('created_at', { ascending: false }).order('id').range(a, b),
+    ),
+    all((a, b) => db.from('goals').select('*').eq('user_id', me).order('created_at', { ascending: true }).order('id').range(a, b)),
+    all((a, b) => db.from('goal_deposits').select('*').eq('user_id', me).order('date', { ascending: false }).order('id').range(a, b)),
+    all((a, b) => db.from('budget_caps').select('*').eq('user_id', me).order('category').range(a, b)),
+    all((a, b) =>
+      db.from('categories').select('*').eq('user_id', me).order('position', { ascending: true }).order('created_at', { ascending: true }).order('id').range(a, b),
+    ),
+    all((a, b) =>
+      db.from('invoice_imports').select('*').eq('user_id', me).order('imported_at', { ascending: false }).order('created_at', { ascending: false }).order('id').range(a, b),
+    ),
+    all((a, b) =>
+      db.from('accounts').select('*').eq('user_id', me).order('position', { ascending: true }).order('created_at', { ascending: true }).order('id').range(a, b),
+    ),
+    all((a, b) => db.from('recurrences').select('*').eq('user_id', me).order('created_at', { ascending: true }).order('id').range(a, b)),
+    all((a, b) => db.from('category_rules').select('*').eq('user_id', me).order('id').range(a, b)),
   ])
   // Papel vem do app_metadata do Auth (só o servidor altera)
   const { data: session } = await db.auth.getSession()
@@ -305,6 +332,14 @@ export const sbAccountApi = {
     await run(sb().rpc('clear_my_data'))
   },
   deleteAccount: async () => {
+    // Fotos só saem quando a exclusão vai acontecer: o banco exige o código do e-mail recente.
+    // Antes apagava as fotos primeiro e, se a exclusão fosse recusada, a conta ficava sem foto.
+    // (Depois da exclusão não dá para apagá-las: a sessão deixa de valer.)
+    const { data: session } = await sb().auth.getSession()
+    if (!session.session?.user.is_anonymous) {
+      const { data: verified, error } = await sb().rpc('recent_email_verification')
+      if (error || verified !== true) throw new ApiError('Confirme com o código enviado ao seu e-mail antes de excluir a conta.', 403)
+    }
     await clearAvatars().catch(() => undefined)
     await run(sb().rpc('delete_my_account'))
     await sb().auth.signOut({ scope: 'local' })
@@ -355,8 +390,10 @@ export const sbInvoicesApi = {
     if (r.duplicate) throw new ApiError('Essa fatura já foi importada. Veja em Cartões → Faturas importadas.', 409)
     return { invoice: toInvoice(r.invoice), transactions: r.transactions.map(toTx), card: r.card ? toCard(r.card) : null }
   },
-  list: async () =>
-    (await run(sb().from('invoice_imports').select('*').eq('user_id', await uid()).order('imported_at', { ascending: false }))).map(toInvoice),
+  list: async () => {
+    const me = await uid()
+    return (await all((a, b) => sb().from('invoice_imports').select('*').eq('user_id', me).order('imported_at', { ascending: false }).order('id').range(a, b))).map(toInvoice)
+  },
   remove: async (id: string) => {
     await run(sb().from('invoice_imports').delete().eq('id', id))
   },
@@ -449,8 +486,10 @@ export const sbGoalsApi = {
   },
   deposit: async (goalId: string, amount: number, date: string) =>
     toDeposit(await run(sb().from('goal_deposits').insert({ goal_id: goalId, amount, date }).select().single())),
-  deposits: async (goalId: string) =>
-    (await run(sb().from('goal_deposits').select('*').eq('user_id', await uid()).eq('goal_id', goalId).order('date', { ascending: false }))).map(toDeposit),
+  deposits: async (goalId: string) => {
+    const me = await uid()
+    return (await all((a, b) => sb().from('goal_deposits').select('*').eq('user_id', me).eq('goal_id', goalId).order('date', { ascending: false }).order('id').range(a, b))).map(toDeposit)
+  },
   updateDeposit: async (d: GoalDeposit) =>
     toDeposit(await run(sb().from('goal_deposits').update({ amount: d.amount, date: d.date }).eq('id', d.id).select().single())),
   removeDeposit: async (d: GoalDeposit) => {

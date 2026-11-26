@@ -13,7 +13,7 @@
  */
 import { isExpense } from '../lib/ledger'
 import { categoryMeta } from '../data/categories'
-import { TODAY } from '../data/mock'
+import { today } from '../data/mock'
 import { brlShort, monthKey, monthName, toISO } from '../lib/format'
 import { balanceOf, cardShort, currentMonth, goalPace, monthSummary, previousMonth } from '../state/store'
 import type { AppState, CategoryId } from '../types'
@@ -150,7 +150,8 @@ const INVOICE_TOTAL = 1743.9
 function buildItems(): InvoiceItem[] {
   const known = SAMPLE.reduce((s, [, , a]) => s + a, 0)
   return SAMPLE.map(([name, category, amount, subscription], i) => {
-    const d = new Date(TODAY.getFullYear(), TODAY.getMonth(), 1 + ((i * 3) % TODAY.getDate()))
+    const t = today()
+    const d = new Date(t.getFullYear(), t.getMonth(), 1 + ((i * 3) % t.getDate()))
     // The one zero-valued row absorbs the difference so items always add up to the total
     const value = amount === 0 ? Math.round((INVOICE_TOTAL - known) * 100) / 100 : amount
     return { name, category, amount: value, date: toISO(d), subscription }

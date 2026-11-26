@@ -2,7 +2,7 @@ import { createContext, useContext, useEffect, useMemo, useReducer, useRef, type
 import { USE_SUPABASE } from '../services/http'
 import { normalizeLabel, SUGGESTED_CATEGORIES } from '../data/categories'
 import { savePrefs } from '../services/supabaseApi'
-import { DEMO_USER, initialState, TODAY } from '../data/mock'
+import { DEMO_USER, initialState, today } from '../data/mock'
 import { restoreSession, sessionEmail, signOut } from '../services/auth'
 import { monthKey, toISO } from '../lib/format'
 import { accountEffect, adjustInvoice, balanceEffect, ensureAccounts, isExpense, kindOf, processDueLocal, round2 } from '../lib/ledger'
@@ -53,6 +53,8 @@ type Action =
   | { type: 'reset' }
   /** Dados recarregados do servidor (ou recalculados no mock) depois de parcelas/recorrências */
   | { type: 'sync'; snapshot: Partial<AppState> }
+  /** Virou o dia com o app aberto: gera recorrências e posta parcelas que venceram (modo local) */
+  | { type: 'newDay' }
   | { type: 'saveAccount'; account: Account }
   /** Lançamentos, recorrências e saldo inicial da conta passam para a primeira conta que sobrar */
   | { type: 'deleteAccount'; id: string }
@@ -140,6 +142,9 @@ function reducer(state: AppState, action: Action): AppState {
     }
     case 'sync':
       return { ...state, ...action.snapshot }
+    case 'newDay':
+      // Sempre um objeto novo: as telas recalculam "hoje", o mês atual e os vencimentos
+      return { ...processDueLocal(state, todayISO()) }
     case 'saveAccount': {
       const a = action.account
       const exists = state.accounts.some((x) => x.id === a.id)
@@ -403,7 +408,7 @@ function load(): AppState {
     const raw = email ? localStorage.getItem(dataKey(email)) : null
     if (raw) return parseState(raw)
     if (email === DEMO_USER.email) return processDueLocal({ ...initialState, user: DEMO_USER }, todayISO())
-    if (email) signOut()
+    if (email) void signOut()
   } catch {
     /* ignore corrupted storage */
   }
@@ -457,7 +462,7 @@ export function useStore() {
 
 /* ---------------------------------------------------------------- selectors */
 
-export const todayISO = () => toISO(TODAY)
+export const todayISO = () => toISO(today())
 export const currentMonth = () => monthKey(todayISO())
 
 export function previousMonth(key: string) {
@@ -631,20 +636,26 @@ export function capWarning(state: AppState, category: CategoryId, key: string, a
 }
 
 export function daysLeftInMonth() {
-  const last = new Date(TODAY.getFullYear(), TODAY.getMonth() + 1, 0).getDate()
-  return last - TODAY.getDate()
+  const t = today()
+  const last = new Date(t.getFullYear(), t.getMonth() + 1, 0).getDate()
+  return last - t.getDate()
 }
 
+/** Vencimento no mês: dia 31 em mês de 30 dias (ou 29/30 em fevereiro) cai no último dia. */
+const dueIn = (year: number, month: number, day: number) => new Date(year, month, Math.min(day, new Date(year, month + 1, 0).getDate()))
+
 export function daysUntilDue(card: Card) {
-  const due = new Date(TODAY.getFullYear(), TODAY.getMonth(), card.dueDay)
-  if (due < TODAY) due.setMonth(due.getMonth() + 1)
-  return Math.round((+due - +TODAY) / 864e5)
+  const t = today()
+  let due = dueIn(t.getFullYear(), t.getMonth(), card.dueDay)
+  if (due < t) due = dueIn(t.getFullYear(), t.getMonth() + 1, card.dueDay)
+  return Math.round((+due - +t) / 864e5)
 }
 
 /** Monthly saving average since the goal started, and months left at that pace. */
 export function goalPace(goal: Goal) {
   const [y, m] = (goal.startedAt ?? currentMonth()).split('-').map(Number)
-  const months = Math.max(1, (TODAY.getFullYear() - y) * 12 + (TODAY.getMonth() + 1 - m) + 1)
+  const t = today()
+  const months = Math.max(1, (t.getFullYear() - y) * 12 + (t.getMonth() + 1 - m) + 1)
   const average = (goal.deposited ?? 0) / months
   const remaining = Math.max(0, goal.target - goal.saved)
   // null = no deposit yet, so there is no pace to project

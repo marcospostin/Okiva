@@ -9,7 +9,7 @@
  */
 import { toISO, uid } from '../lib/format'
 import { adjustInvoice, anticipateInstallments, buildInstallments, buildOngoingInstallments, processDueLocal, round2, type InstallmentInput, type OngoingInstallmentInput } from '../lib/ledger'
-import { TODAY } from '../data/mock'
+import { today as todayDate } from '../data/mock'
 import type { Account, AppState, Budget, CapAlert, Card, CategoryId, CategoryRule, CustomCategory, Goal, GoalDeposit, InvoiceImport, Recurrence, Transaction, User } from '../types'
 import { mockDelay, request, USE_MOCK, USE_SUPABASE } from './http'
 import {
@@ -58,7 +58,7 @@ export type RecurrenceInput = Omit<Recurrence, 'id' | 'lastRun'>
 export type { InstallmentInput, OngoingInstallmentInput }
 
 const snapshotOf = ({ user: _u, stage: _s, hideBalance: _h, ...rest }: AppState): AccountSnapshot => rest
-const today = () => toISO(TODAY)
+const today = () => toISO(todayDate())
 
 /* ------------------------------------------------------------- mock helpers */
 

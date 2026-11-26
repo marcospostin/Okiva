@@ -1,5 +1,5 @@
-import { lazy, Suspense, useCallback, useEffect, useState } from 'react'
-import { isRecoverySession, markRecoveryPending, onPasswordRecovery, onSignedOut, restoreSupabaseSession } from './services/auth'
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
+import { isRecoverySession, markRecoveryPending, onPasswordRecovery, onSessionChange, restoreSupabaseSession } from './services/auth'
 import { USE_SUPABASE } from './services/http'
 import DemoBanner from './components/DemoBanner'
 import { Splash } from './components/Splash'
@@ -7,7 +7,8 @@ import TabBar, { SideRail } from './components/TabBar'
 import { cx, ScreenSkeleton, ToastView } from './components/ui'
 import Home from './screens/Home'
 import Login from './screens/Login'
-import { StoreProvider, useStore } from './state/store'
+import { StoreProvider, todayISO, useStore } from './state/store'
+import { accountApi } from './services/finance'
 import { UIProvider, useUI } from './state/ui'
 
 // Code splitting: secondary screens and sheets load on demand
@@ -70,7 +71,8 @@ function Screen({ onReady }: { onReady: () => void }) {
         if (CONFIRM_ACTION || EMAIL_CHANGE_HALF) window.history.replaceState(window.history.state, '', window.location.pathname)
       })
       .finally(() => alive && setBooting(false))
-    const stop = onSignedOut(() => dispatch({ type: 'logout' }))
+    // Sessão desta aba acabou (ou virou outra pessoa) fora do app: login, ou recarrega a conta certa
+    const stop = onSessionChange((change) => (change === 'out' ? dispatch({ type: 'logout' }) : window.location.reload()))
     // Link de recuperação aberto com o app já carregado: fecha a conta e mostra só a senha nova
     const stopRecovery = onPasswordRecovery(() => {
       dispatch({ type: 'logout' })
@@ -101,6 +103,35 @@ function Screen({ onReady }: { onReady: () => void }) {
   useEffect(() => {
     if (!booting) onReady()
   }, [booting, onReady])
+
+  // Virou o dia com o app aberto (aba esquecida aberta, celular que volta do segundo plano):
+  // processa recorrências e parcelas que venceram e atualiza "hoje", o mês atual e os vencimentos.
+  const latest = useRef(state)
+  latest.current = state
+  useEffect(() => {
+    if (!signedIn) return
+    let day = todayISO()
+    const check = () => {
+      const now = todayISO()
+      if (now === day) return
+      day = now
+      if (USE_SUPABASE) {
+        // O banco processa os vencimentos (process_due) ao carregar a conta
+        accountApi.snapshot(latest.current).then((snapshot) => dispatch({ type: 'sync', snapshot }), () => dispatch({ type: 'newDay' }))
+      } else {
+        dispatch({ type: 'newDay' })
+      }
+    }
+    const onVisible = () => document.visibilityState === 'visible' && check()
+    document.addEventListener('visibilitychange', onVisible)
+    window.addEventListener('focus', check)
+    const id = window.setInterval(check, 60_000)
+    return () => {
+      document.removeEventListener('visibilitychange', onVisible)
+      window.removeEventListener('focus', check)
+      window.clearInterval(id)
+    }
+  }, [signedIn, dispatch])
 
   if (booting) return <ScreenSkeleton />
 

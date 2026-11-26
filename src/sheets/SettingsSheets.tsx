@@ -485,7 +485,7 @@ export function VerifyActionSheet({ action, confirmed, close }: { action: 'reset
         () => {
           forgetAccountData(email)
           deleteLocalAccount(email)
-          signOut()
+          void signOut()
           setToken(null)
           close()
           navigate('home')

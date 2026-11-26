@@ -4,7 +4,7 @@ import { Avatar, Page, PrimaryButton, ScreenHeader, Spinner, Switch } from '../c
 import { OptionGroup, OptionRow } from '../sheets/SettingsSheets'
 import { readAvatar } from '../lib/image'
 import { toISO } from '../lib/format'
-import { TODAY } from '../data/mock'
+import { today } from '../data/mock'
 import { accountApi } from '../services/finance'
 import { setDemoAvatar, signOut, updateAccount } from '../services/auth'
 import { setToken, USE_SUPABASE } from '../services/http'
@@ -72,16 +72,20 @@ export default function Settings() {
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `okiva-meus-dados-${toISO(TODAY)}.json`
+    a.download = `okiva-meus-dados-${toISO(today())}.json`
     a.click()
     URL.revokeObjectURL(url)
     notify('Arquivo com seus dados baixado')
   }
 
-  function exit() {
-    navigate('home')
-    signOut()
+  const [leaving, setLeaving] = useState(false)
+  async function exit() {
+    if (leaving) return
+    setLeaving(true)
+    // Espera a sessão fechar (na demonstração, a conta temporária ser apagada) antes de voltar ao login
+    await signOut()
     setToken(null)
+    navigate('home')
     dispatch({ type: 'logout' })
   }
 
@@ -190,7 +194,9 @@ export default function Settings() {
                 <PrimaryButton tone="dark" onClick={() => setConfirmExit(false)}>
                   Ficar
                 </PrimaryButton>
-                <PrimaryButton onClick={exit}>Sair</PrimaryButton>
+                <PrimaryButton onClick={exit} loading={leaving}>
+                  Sair
+                </PrimaryButton>
               </div>
             </div>
           ) : (

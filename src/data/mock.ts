@@ -2,8 +2,17 @@ import { toISO } from '../lib/format'
 import { SUGGESTED_CATEGORIES } from './categories'
 import type { AppState, GoalDeposit, Transaction } from '../types'
 
-/** Current local date, normalized to midnight to keep date calculations stable. */
-export const TODAY = new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate())
+/**
+ * Hoje (data local, à meia-noite), calculado a cada chamada. Antes era uma constante criada ao
+ * carregar o app: com a aba aberta na virada do dia, o app continuava no dia (e no mês) anterior.
+ */
+export const today = () => {
+  const d = new Date()
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate())
+}
+
+/** Só para datar os dados de exemplo ao montar o estado inicial. Para "hoje", use today(). */
+export const TODAY = today()
 
 /** Day in the current month, `offset` days before today (never before day 1). */
 const thisMonth = (offset: number) =>

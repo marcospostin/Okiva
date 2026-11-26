@@ -75,6 +75,7 @@ async function supabaseSignIn(input: { email: string; password: string; remember
   const { error } = await sb().auth.signInWithPassword({ email: normalize(input.email), password: input.password })
   if (error) throw authError(error)
   const state = await applyPendingAvatar(await loadAccount())
+  await trackActiveUser()
   return { user: state.user!, state }
 }
 
@@ -102,6 +103,7 @@ async function supabaseSignUp(input: { name: string; email: string; password: st
   }
   if (input.avatar) await sbAccountApi.updateProfile({ avatar: input.avatar }).catch(() => undefined)
   const state = await loadAccount()
+  await trackActiveUser()
   return { user: state.user!, state }
 }
 
@@ -157,6 +159,7 @@ export async function startDemo(): Promise<AuthResult> {
     throw new ApiError('Não deu para preparar a demonstração. Tente de novo.', 500)
   }
   const state = await loadAccount()
+  await trackActiveUser()
   return { user: state.user!, state }
 }
 
@@ -201,7 +204,9 @@ export async function restoreSupabaseSession(): Promise<AppState | null> {
   if (!data.session) return null
   try {
     // Recarregou a página na demonstração: a foto escolhida continua (vem da aba)
-    return withDemoAvatar(await applyPendingAvatar(await loadAccount()))
+    const state = withDemoAvatar(await applyPendingAvatar(await loadAccount()))
+    await trackActiveUser()
+    return state
   } catch {
     await sb().auth.signOut({ scope: 'local' })
     return null
@@ -273,13 +278,39 @@ export async function finishRecovery() {
   if (error) await sb().auth.signOut({ scope: 'local' })
 }
 
-/** Avisa quando a sessão termina fora do app (expirou, saiu em outra aba). */
-export function onSignedOut(cb: () => void): () => void {
+/**
+ * Avisa quando a sessão DESTA aba termina ou troca de pessoa fora do app (expirou, saiu em outra
+ * aba com "lembrar de mim"). Os avisos chegam também de outras abas (BroadcastChannel do Supabase),
+ * inclusive de uma demonstração com sessão própria: por isso confere a sessão que esta aba usa de
+ * fato antes de agir, em vez de confiar no evento.
+ *   - 'out': esta aba ficou sem sessão → volta ao login.
+ *   - 'changed': esta aba passou a ter outra pessoa → recarrega a conta certa.
+ */
+export function onSessionChange(cb: (change: 'out' | 'changed') => void): () => void {
   if (!USE_SUPABASE) return () => undefined
   const { data } = sb().auth.onAuthStateChange((event) => {
-    if (event === 'SIGNED_OUT') cb()
+    if (event !== 'SIGNED_OUT' && event !== 'SIGNED_IN') return
+    // Fora do callback: o Supabase não deixa chamar getSession dentro dele (trava)
+    window.setTimeout(async () => {
+      const { data: current } = await sb().auth.getSession()
+      const id = current.session?.user.id ?? null
+      if (!id) {
+        if (activeUserId) cb('out')
+        activeUserId = null
+      } else if (activeUserId && id !== activeUserId) {
+        cb('changed')
+      }
+    }, 0)
   })
   return () => data.subscription.unsubscribe()
+}
+
+/** Quem está com a conta aberta nesta aba (para reconhecer troca de pessoa). */
+let activeUserId: string | null = null
+
+async function trackActiveUser() {
+  const { data } = await sb().auth.getSession()
+  activeUserId = data.session?.user.id ?? null
 }
 
 /* ------------------------------------------------------------ login */
@@ -324,13 +355,19 @@ export function updateAccount(user: User) {
 /** Removes the account from this browser and ends the session (data is removed by the store). */
 export function deleteLocalAccount(email: string) {
   writeAccounts(readAccounts().filter((a) => a.email !== normalize(email)))
-  signOut()
+  void signOut()
 }
 
-export function signOut() {
+/**
+ * Encerra a sessão e espera terminar (na demonstração, apaga a conta temporária antes).
+ * Quem chama deve aguardar antes de voltar ao login: assim a sessão antiga não "volta" num
+ * recarregamento rápido nem derruba uma sessão nova aberta logo em seguida.
+ */
+export async function signOut(): Promise<void> {
   localStorage.removeItem(SESSION_KEY)
   sessionStorage.removeItem(SESSION_KEY)
-  if (USE_SUPABASE) void endSupabaseSession()
+  activeUserId = null
+  if (USE_SUPABASE) await endSupabaseSession().catch(() => sb().auth.signOut({ scope: 'local' }).then(undefined, () => undefined))
 }
 
 export function sessionEmail() {

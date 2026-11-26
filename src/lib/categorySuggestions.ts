@@ -12,7 +12,7 @@
  */
 import { isExpense } from './ledger'
 import { categoryMeta, findCategoryByLabel, hasCategory, isBuiltin, normalizeLabel } from '../data/categories'
-import { TODAY } from '../data/mock'
+import { today } from '../data/mock'
 import { toISO } from './format'
 import type { AppState, BuiltinCategoryId, CategoryId } from '../types'
 
@@ -53,7 +53,7 @@ const WINDOW_DAYS = 90
 
 export function suggestCategories(state: Pick<AppState, 'transactions' | 'customCategories' | 'budget'>): CategorySuggestion[] {
   const hasCap = (id: CategoryId) => state.budget.caps[id] !== undefined
-  const since = new Date(TODAY)
+  const since = today()
   since.setDate(since.getDate() - WINDOW_DAYS)
   const recent = state.transactions.filter((t) => isExpense(t) && t.date >= toISO(since))
 
