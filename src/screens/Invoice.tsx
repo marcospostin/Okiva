@@ -178,7 +178,7 @@ export default function Invoice() {
           }
         />
 
-        <div className="grid gap-x-12 md:grid-cols-2 md:pt-4 lg:gap-x-16">
+        <div className="grid gap-x-12 wide:grid-cols-2 md:pt-4 lg:gap-x-16">
           <div className="flex flex-col">
             <div className="pt-6">
               {phase.name === 'pick' ? (

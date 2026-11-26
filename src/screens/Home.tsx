@@ -341,14 +341,14 @@ export default function Home() {
             <p className="font-inter-m text-[18px] font-medium text-white">Olá, {state.user?.name.split(' ')[0] ?? 'Lucas'}</p>
           </div>
           <div className="flex shrink-0 flex-col items-end gap-[6px]">
-            <p className="flex items-center gap-[0.22em] font-logo text-[22px] leading-none font-bold tracking-[-0.6px] text-esk-lime md:hidden"><Isotype />Okiva</p>
+            <p className="flex items-center gap-[0.22em] font-logo text-[22px] leading-none font-bold tracking-[-0.6px] text-esk-lime md:text-[26px]"><Isotype className="md:hidden" />Okiva</p>
             {plus && <span className="rounded-full bg-esk-lilac px-2 py-1 font-mono text-[9px] leading-none font-medium tracking-[0.8px] text-esk-ink">PLUS</span>}
           </div>
         </header>
 
-        <div className="mt-6 grid gap-6 md:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] md:gap-8 lg:gap-10 3xl:grid-cols-[minmax(0,4fr)_minmax(0,8fr)] 3xl:gap-12">
+        <div className="mt-6 grid gap-6 wide:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] md:gap-8 lg:gap-10 wide:3xl:grid-cols-[minmax(0,4fr)_minmax(0,8fr)] 3xl:gap-12">
           {/* Left: balance + shortcuts */}
-          <div className="flex flex-col gap-6 md:sticky md:top-8 md:self-start">
+          <div className="flex flex-col gap-6 wide:sticky wide:top-8 wide:self-start">
             <section
               aria-label="Saldo disponível"
               className="@container relative flex min-h-[184px] flex-col gap-3 overflow-hidden rounded-[32px] px-6 py-[22px] lg:min-h-[240px] lg:rounded-[34px] lg:px-8 lg:py-7 3xl:min-h-[280px]"

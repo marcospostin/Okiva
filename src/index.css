@@ -3,6 +3,17 @@
 @import url('https://fonts.googleapis.com/css2?family=MuseoModerno:wght@700&display=swap');
 @import 'tailwindcss';
 
+/* Layout em colunas: tablet deitado (a partir de 800px) ou qualquer tela a partir de 1100px.
+   Tablet em pé fica empilhado como no celular (só ganha a barra lateral, que segue o md). */
+@custom-variant wide {
+  @media (width >= 50rem) and (orientation: landscape) {
+    @slot;
+  }
+  @media (width >= 68.75rem) {
+    @slot;
+  }
+}
+
 /* Inter faces resolved from the Figma design (Home) */
 @font-face {
   font-family: 'Inter:Regular';

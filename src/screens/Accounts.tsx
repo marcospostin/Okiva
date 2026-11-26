@@ -54,7 +54,7 @@ export default function Accounts() {
           }
         />
 
-        <div className="grid gap-x-12 md:grid-cols-2 md:pt-4 lg:gap-x-16">
+        <div className="grid gap-x-12 wide:grid-cols-2 md:pt-4 lg:gap-x-16">
           <section aria-label="Suas contas" className="flex flex-col gap-[18px] pt-6">
             <div className="rounded-[34px] bg-esk-surface p-6 md:p-8">
               <p className="font-sat text-[15px] font-medium text-esk-muted">Saldo total</p>
@@ -215,7 +215,7 @@ function AccountDetail({ account, onBack, onOpen }: { account: Account; onBack: 
           }
         />
 
-        <div className="grid gap-x-12 md:grid-cols-2 md:pt-4 lg:gap-x-16">
+        <div className="grid gap-x-12 wide:grid-cols-2 md:pt-4 lg:gap-x-16">
           <section aria-label="Saldo" className="flex flex-col gap-[18px] pt-6">
             <div className="rounded-[34px] bg-esk-surface p-6 md:p-8">
               <p className="font-sat text-[15px] font-medium text-esk-muted">{isSub ? `Subconta de ${main.name}` : [account.nickname, subs.length ? 'total com subcontas' : accountKindLabel(account.kind)].filter(Boolean).join(' · ')}</p>

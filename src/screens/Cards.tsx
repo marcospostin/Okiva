@@ -58,7 +58,7 @@ export default function Cards() {
             />
           </div>
         ) : (
-          <div className="grid gap-x-12 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] md:pt-4 lg:gap-x-16 3xl:grid-cols-[minmax(0,5fr)_minmax(0,6fr)]">
+          <div className="grid gap-x-12 wide:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] md:pt-4 lg:gap-x-16 wide:3xl:grid-cols-[minmax(0,5fr)_minmax(0,6fr)]">
             <div className="md:max-w-[520px]">
               {/* Wallet stack: tapping brings the next card to the front */}
               <div className="pt-6">
@@ -158,7 +158,7 @@ export default function Cards() {
 
         {/* History of invoices read by the AI: open one to see its expenses or undo the import */}
         {state.invoices.length > 0 && (
-          <section aria-label="Faturas importadas" className="flex flex-col gap-3 pt-10 md:max-w-[calc(50%-24px)] md:pt-12">
+          <section aria-label="Faturas importadas" className="flex flex-col gap-3 pt-10 wide:max-w-[calc(50%-24px)] md:pt-12">
             <h3 className="font-sat text-[17px] font-medium text-esk-muted">Faturas importadas</h3>
             <ListPanel>
               {state.invoices.map((inv, i) => {

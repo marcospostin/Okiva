@@ -585,7 +585,7 @@ export function ScreenSkeleton() {
           <div className="size-[44px] animate-pulse rounded-full bg-esk-surface" />
           <div className="h-[30px] w-[180px] animate-pulse rounded-[12px] bg-esk-surface" />
         </div>
-        <div className="grid gap-6 pt-6 md:grid-cols-2 md:pt-10">
+        <div className="grid gap-6 pt-6 wide:grid-cols-2 md:pt-10">
           <div className={`h-[238px] ${bar}`} />
           <div className="flex flex-col gap-3">
             <div className={`h-[76px] ${bar}`} />

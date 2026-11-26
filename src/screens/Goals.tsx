@@ -43,7 +43,7 @@ export default function Goals() {
           }
         />
 
-        <div className="grid gap-x-12 md:grid-cols-2 md:pt-4 lg:gap-x-16">
+        <div className="grid gap-x-12 wide:grid-cols-2 md:pt-4 lg:gap-x-16">
           {/* This month: budget */}
           <section aria-label="Este mês" className="flex flex-col gap-[18px] pt-6">
             <SectionHeader title="Este mês" action={<span className="font-sat text-[13px] text-esk-subtle">Faltam {daysLeftInMonth()} dias</span>} />
@@ -234,7 +234,7 @@ export default function Goals() {
             <button
               type="button"
               onClick={() => openSheet({ type: 'plus', then: 'assistant' })}
-              className="group mt-10 flex animate-rise items-center justify-between gap-4 rounded-[30px] border border-dashed border-esk-lilac/50 p-[22px] text-left transition hover:border-esk-lilac active:scale-[0.99] md:col-span-2 md:p-8"
+              className="group mt-10 flex animate-rise items-center justify-between gap-4 rounded-[30px] border border-dashed border-esk-lilac/50 p-[22px] text-left transition hover:border-esk-lilac active:scale-[0.99] wide:col-span-2 md:p-8"
             >
               <span className="flex flex-col gap-1">
                 <Kicker className="text-esk-lilac">Assistente Okiva · Plus</Kicker>
@@ -249,7 +249,7 @@ export default function Goals() {
             <button
               type="button"
               onClick={() => navigate('assistant')}
-              className="group mt-10 flex animate-rise flex-col gap-3 rounded-[30px] bg-esk-lilac p-[22px] text-left text-esk-ink transition hover:brightness-[0.98] active:scale-[0.99] md:col-span-2 md:flex-row md:items-end md:justify-between md:p-8"
+              className="group mt-10 flex animate-rise flex-col gap-3 rounded-[30px] bg-esk-lilac p-[22px] text-left text-esk-ink transition hover:brightness-[0.98] active:scale-[0.99] wide:col-span-2 md:flex-row md:items-end md:justify-between md:p-8"
             >
               <div className="flex flex-col gap-2">
                 <Kicker>Assistente Okiva</Kicker>
