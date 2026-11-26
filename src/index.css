@@ -1,5 +1,6 @@
 @import url('https://api.fontshare.com/v2/css?f[]=satoshi@400,500,700&display=swap');
 @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=MuseoModerno:wght@700&display=swap');
 @import 'tailwindcss';
 
 /* Inter faces resolved from the Figma design (Home) */
@@ -63,6 +64,7 @@
   --color-esk-positive: #6ee39a;
 
   --font-sans: 'Satoshi', 'Inter:Regular', ui-sans-serif, system-ui, sans-serif;
+  --font-logo: 'MuseoModerno', 'Satoshi', ui-sans-serif, system-ui, sans-serif;
   --font-sat: 'Satoshi', 'Inter:Regular', ui-sans-serif, system-ui, sans-serif;
   --font-inter: 'Inter:Regular', ui-sans-serif, system-ui, sans-serif;
   --font-inter-m: 'Inter:Medium', ui-sans-serif, system-ui, sans-serif;

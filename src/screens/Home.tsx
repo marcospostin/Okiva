@@ -340,7 +340,7 @@ export default function Home() {
           </div>
           <div className="flex shrink-0 items-center gap-2">
             {plus && <span className="rounded-full bg-esk-lilac px-2 py-1 font-mono text-[9px] leading-none font-medium tracking-[0.8px] text-esk-ink">PLUS</span>}
-            <p className="font-sat text-[22px] leading-none font-bold tracking-[-0.6px] text-esk-lime md:text-[26px]">Okiva</p>
+            <p className="font-logo text-[22px] leading-none font-bold tracking-[-0.6px] text-esk-lime md:text-[26px]">Okiva</p>
           </div>
         </header>
 

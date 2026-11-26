@@ -57,7 +57,7 @@ export function Splash({ ready }: { ready: boolean }) {
         className="flex h-full flex-col justify-between rounded-[34px] px-7 pt-9 pb-10 text-esk-ink"
         style={{ backgroundImage: 'var(--esk-gradient-hero)', paddingTop: 'max(36px, env(safe-area-inset-top))', paddingBottom: 'max(40px, env(safe-area-inset-bottom))' }}
       >
-        <p className="animate-rise font-sat text-[44px] leading-none font-bold tracking-[-1.4px]">Okiva</p>
+        <p className="animate-rise font-logo text-[44px] leading-none font-bold tracking-[-1.4px]">Okiva</p>
         <div>
           <p className="animate-rise font-sat text-[36px] leading-[1.06] font-medium tracking-[-1.4px]" style={{ animationDelay: '120ms' }}>
             Registre gastos, acompanhe cartões e guarde para o que importa.
