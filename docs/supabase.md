@@ -35,11 +35,12 @@ Especificação de negócio: [modelo-de-dados.md](modelo-de-dados.md) · contrat
 | `supabase/migrations/20261130120000_okiva_saldo_exclusoes.sql` | `balance_of` igual ao app (transferência 0, ajuste com sinal) e `set_balance` certo; `clear_my_data` apaga contas uma a uma (subcontas primeiro); cartão removido: `transactions.removed_card`, compras fora do saldo e pagamentos continuam pagamentos |
 | `supabase/migrations/20261201120000_okiva_credito_adiantar.sql` | Fatura sem corte em zero (negativa = crédito de quem pagou a mais); desfazer importação pela diferença; RPC `anticipate_installments` (adiantar as últimas parcelas para a fatura de hoje, com desconto) |
 | `supabase/migrations/20261202120000_okiva_operacoes_atomicas.sql` | Operações "tudo ou nada": `replace_tx_with_installments` (à vista → parcelado), `replace_installments_with_tx` (parcelado → à vista) e `import_invoice` com `p_ongoing` (parcelas lidas na fatura entram na mesma transação) |
+| `supabase/migrations/20261203120000_okiva_saldo_negativo_cadastro.sql` | `handle_new_user` aceita saldo inicial negativo no cadastro (cheque especial) |
 | `supabase/migrations/20261124180000_okiva_conta_suporte_seguranca.sql` | preferências de notificação, mensagens de suporte e confirmação por e-mail para apagar dados |
 | `supabase/templates/*.html` | e-mails em português (cadastro, código de confirmação, redefinir senha, trocar e-mail): colar no dashboard |
-| `supabase/seed.sql` | **seed temporário** da conta demo (mocks) |
+| `supabase/seed.sql` | sem dados fixos: a demonstração é criada na hora por `seed_demo_account()` |
 | `supabase/cleanup_demo.sql` | remove a conta demo e tudo dela |
-| `prisma/schema.prisma` | espelho do schema em Prisma (só documentação) |
+| `supabase/tests/regras_banco.sql` | teste das regras do banco (saldo, crédito, adiantar, cartão removido, apagar dados); termina com erro de propósito para desfazer tudo |
 | `src/services/database.types.ts` | tipos TypeScript gerados do banco |
 
 Os nomes dos arquivos de migration usam as mesmas versões registradas no projeto remoto
@@ -56,7 +57,7 @@ VITE_SUPABASE_ANON_KEY=
 
 A chave publishable/anon é pública por definição (vai no bundle do navegador); a proteção é a RLS.
 **Nunca** coloque a `service_role` key no front nem em arquivo versionado.
-Para Prisma/psql (só servidor): `DATABASE_URL` (pooler) e `DIRECT_URL` (conexão direta), em `.env` fora do git.
+Para psql/ferramentas de servidor: `DATABASE_URL` (pooler) e `DIRECT_URL` (conexão direta), em `.env` fora do git.
 
 ## Front ligado ao banco
 
@@ -249,16 +250,13 @@ Políticas em `storage.objects` (`okiva_files_select_own`, `_insert_own`, `_upda
 nesses dois buckets e só quando a primeira pasta do caminho é o próprio `auth.uid()`. Leitura pelo front com `createSignedUrl`.
 Guarde em `profiles.avatar_url` o caminho do objeto (não uma URL pública).
 
-## Conta demo (seed TEMPORÁRIO)
+## Conta demo
 
-`supabase/seed.sql` cria `lucas@okiva.app` (Lucas) **sem senha** e com e-mail confirmado, e os dados de `src/data/mock.ts`:
-3 cartões (ordem da carteira Viagem → Salário → Principal, faturas 98 / 640 / 1284), 11 gastos com datas relativas a hoje,
-4 metas (Japão principal), 49 depósitos mensais, teto do mês 3200 + 4 tetos por categoria, stage 2, saldo R$ 14.500.
-As faturas dos cartões são os valores "digitados" do mock: os gastos de exemplo foram inseridos sem somar de novo.
-
-- Para entrar com o demo: Dashboard → Authentication → Users → `lucas@okiva.app` → enviar link mágico / recuperação de senha.
-- **Remover quando houver dados reais**: rode `supabase/cleanup_demo.sql` no SQL Editor (exclui o usuário em `auth.users`;
-  o resto sai em cascata). Arquivos de Storage, se houver, removem-se pelo dashboard/API (o seed não cria nenhum).
+A demonstração não usa um usuário fixo. "Ver demonstração" cria uma conta anônima só para o visitante e chama
+`seed_demo_account()`, que copia os dados de exemplo do Lucas (contas Nubank "Principal" com caixinhas e Porto Bank
+"Dia a dia", 3 cartões, metas, parcelas). Ao sair, `delete_my_account` apaga a conta; quem só fecha a aba é removido
+pela limpeza agendada (contas anônimas com mais de 24 h). O antigo usuário fixo `lucas@okiva.app` (seed.sql) saiu;
+se ainda existir no banco, remova com `supabase/cleanup_demo.sql`.
 
 ## Decisões e riscos
 

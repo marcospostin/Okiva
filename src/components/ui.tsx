@@ -443,23 +443,54 @@ export function MoneyInput({
   onChange,
   large,
   autoFocus,
+  allowNegative,
 }: {
   id?: string
   value: number
   onChange: (v: number) => void
   large?: boolean
   autoFocus?: boolean
+  /** Saldo pode ser negativo (cheque especial): mostra o botão +/− */
+  allowNegative?: boolean
 }) {
-  const cents = Math.round(value * 100)
+  // O sinal fica guardado à parte: dá para escolher "−" antes de digitar (com o valor ainda em zero)
+  const [negative, setNegative] = useState(value < 0)
+  useEffect(() => {
+    if (value !== 0) setNegative(value < 0)
+  }, [value])
+  const neg = !!allowNegative && negative
+  const cents = Math.abs(Math.round(value * 100))
   const display = (cents / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  const emit = (abs: number, isNeg: boolean) => onChange(isNeg && abs !== 0 ? -abs : abs)
   return (
     <div
       className={cx(
         'flex items-baseline gap-2 rounded-[22px] bg-esk-elevated px-5 ring-1 ring-esk-track focus-within:ring-esk-lime',
         large ? 'py-4' : 'h-[52px] items-center',
+        allowNegative && 'pl-2',
       )}
     >
-      <span className={cx('font-sat font-medium text-esk-muted', large ? 'text-[22px]' : 'text-[16px]')}>R$</span>
+      {allowNegative && (
+        <button
+          type="button"
+          onClick={() => {
+            setNegative(!neg)
+            emit(cents / 100, !neg)
+          }}
+          aria-label={neg ? 'Valor negativo. Tocar para deixar positivo' : 'Valor positivo. Tocar para deixar negativo'}
+          aria-pressed={neg}
+          className={cx(
+            'grid shrink-0 place-items-center self-center rounded-full font-sat font-medium transition active:scale-90',
+            large ? 'size-[40px] text-[22px]' : 'size-[34px] text-[18px]',
+            neg ? 'bg-esk-negative/20 text-esk-negative' : 'bg-white/[0.06] text-esk-muted hover:text-white',
+          )}
+        >
+          {neg ? '−' : '+'}
+        </button>
+      )}
+      <span className={cx('font-sat font-medium', neg ? 'text-esk-negative' : 'text-esk-muted', large ? 'text-[22px]' : 'text-[16px]')}>
+        {neg ? '−R$' : 'R$'}
+      </span>
       <input
         id={id}
         inputMode="numeric"
@@ -468,10 +499,11 @@ export function MoneyInput({
         value={display}
         onChange={(e) => {
           const digits = e.target.value.replace(/\D/g, '').slice(0, 11)
-          onChange(Number(digits || '0') / 100)
+          emit(Number(digits || '0') / 100, neg)
         }}
         className={cx(
-          'w-full min-w-0 bg-transparent font-sat font-medium text-white outline-none',
+          'w-full min-w-0 bg-transparent font-sat font-medium outline-none',
+          neg ? 'text-esk-negative' : 'text-white',
           large ? 'text-[42px] tracking-[-1.7px]' : 'text-[16px]',
         )}
       />

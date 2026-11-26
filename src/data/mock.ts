@@ -1,4 +1,4 @@
-import { toISO } from '../lib/format'
+import { toISO, byDateDesc } from '../lib/format'
 import { SUGGESTED_CATEGORIES } from './categories'
 import type { AppState, GoalDeposit, Transaction } from '../types'
 
@@ -53,7 +53,7 @@ const EXAMPLE_DEPOSITS: GoalDeposit[] = [
   ...monthlyDeposits('reserva', 400, 12),
   ...monthlyDeposits('curso', 200, 10),
   ...monthlyDeposits('carro', 750, 12),
-].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0))
+].sort(byDateDesc)
 
 export const DEMO_USER = { name: 'Lucas', email: 'lucas@okiva.app' }
 

@@ -7,7 +7,7 @@
  *
  * Contrato completo (rotas, payloads, erros): docs/integracao-backend.md
  */
-import { toISO, uid } from '../lib/format'
+import { toISO, uid, byDateDesc } from '../lib/format'
 import { adjustInvoice, anticipateInstallments, buildInstallments, buildOngoingInstallments, processDueLocal, round2, type InstallmentInput, type OngoingInstallmentInput } from '../lib/ledger'
 import { today as todayDate } from '../data/mock'
 import type { Account, AppState, Budget, CapAlert, Card, CategoryId, CategoryRule, CustomCategory, Goal, GoalDeposit, InvoiceImport, Recurrence, Transaction, User } from '../types'
@@ -258,7 +258,7 @@ const installmentsRest = {
     const fresh = buildInstallments(input, t)
     let cards = old.reduce((c, x) => adjustInvoice(c, x, -1, t), current.cards)
     cards = fresh.reduce((c, x) => adjustInvoice(c, x, 1, t), cards)
-    const transactions = [...fresh, ...current.transactions.filter((x) => !old.includes(x))].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0))
+    const transactions = [...fresh, ...current.transactions.filter((x) => !old.includes(x))].sort(byDateDesc)
     return mock(snapshotOf({ ...current, cards, transactions }))
   },
   /** POST /api/installments/ongoing — compra parcelada que começou antes do Okiva (da parcela atual em diante). */
@@ -268,7 +268,7 @@ const installmentsRest = {
     const fresh = buildOngoingInstallments(input, current.cards.find((c) => c.id === input.cardId), t)
     // Importação: o total lido já virou a fatura; parcelas com invoiceId não somam ao entrar (igual ao banco)
     const cards = fresh.filter((x) => !x.invoiceId).reduce((c, x) => adjustInvoice(c, x, 1, t), current.cards)
-    const transactions = [...fresh, ...current.transactions].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0))
+    const transactions = [...fresh, ...current.transactions].sort(byDateDesc)
     return mock(snapshotOf({ ...current, cards, transactions }))
   },
   /** POST /api/installments/replace-tx — gasto à vista vira parcelado (uma operação só). */

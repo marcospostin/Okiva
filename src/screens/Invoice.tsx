@@ -1,5 +1,5 @@
 import { Camera, Check } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { categoryIds, categoryMeta, hasCategory } from '../data/categories'
 import type { CategoryId } from '../types'
 import { Asset, CategoryRowIcon } from '../components/icons'
@@ -124,8 +124,13 @@ export default function Invoice() {
   }
   const categoryOf = (i: number): CategoryId | null => (i in cats ? cats[i] : aiCategory(i))
   const learned = (i: number) => !(i in cats) && !!found && !found.items[i].category && aiCategory(i) !== null
-  // Sem categoria primeiro, para ninguém deixar passar
-  const order = found ? found.items.map((_, i) => i).sort((a, b) => Number(categoryOf(b) === null) - Number(categoryOf(a) === null)) : []
+  // Sem categoria primeiro, para ninguém deixar passar. A ordem é decidida uma vez, quando a leitura
+  // chega: classificar um item não o faz pular de lugar (antes o próximo toque caía no item errado).
+  const order = useMemo(
+    () => (found ? found.items.map((_, i) => i).sort((a, b) => Number(aiCategory(b) === null) - Number(aiCategory(a) === null)) : []),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [found],
+  )
   const pendingItems = order.filter((i) => categoryOf(i) === null).length
   const progress = phase.name === 'reading' ? phase.progress : found ? 100 : 0
   const fileName = phase.name === 'reading' ? phase.file.name : found?.fileName
@@ -236,7 +241,7 @@ export default function Invoice() {
               <ListRow
                 icon={<Asset name="97e22.svg" size={20} />}
                 title="Total da fatura"
-                subtitle={found ? `Vence em ${found.dueInDays} dias` : phase.name === 'reading' ? 'Lendo com IA…' : 'Aguardando leitura'}
+                subtitle={found ? `Vence em ${found.dueInDays} ${found.dueInDays === 1 ? 'dia' : 'dias'}` : phase.name === 'reading' ? 'Lendo com IA…' : 'Aguardando leitura'}
                 value={found ? <CountUp value={found.total} format={(n) => privateMoney(brlShort(Math.round(n)), hidden)} /> : <Skeleton active={phase.name === 'reading'} />}
               />
             </ListPanel>

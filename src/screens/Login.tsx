@@ -354,7 +354,11 @@ function DemoEntry() {
     setLoading(true)
     try {
       const result = await startDemo()
-      if ('confirmEmail' in result) return
+      if ('confirmEmail' in result) {
+        // Não acontece na demonstração, mas sem isso o botão giraria para sempre
+        setLoading(false)
+        return
+      }
       enter(result.user, { state: result.state, welcome: 'Bem-vindo à demonstração do Okiva' })
     } catch (err) {
       setError(errorMessage(err, 'Não deu para abrir a demonstração. Tente de novo.'))
@@ -469,8 +473,14 @@ function ResetForm({ onDone }: { onDone: () => void }) {
   }
 
   async function cancel() {
-    await finishRecovery()
-    onDone()
+    // Sem internet, finishRecovery falha: mesmo assim volta ao login (antes o botão ficava sem fazer nada)
+    try {
+      await finishRecovery()
+    } catch {
+      /* a sessão de recuperação expira sozinha */
+    } finally {
+      onDone()
+    }
   }
 
   return (
@@ -601,7 +611,7 @@ function SignupForm({ onSwitch }: { onSwitch: () => void }) {
           <PasswordInput id="confirm-password" autoComplete="new-password" value={confirmPassword} onChange={setConfirmPassword} />
         </Field>
         <Field label="Quanto você tem hoje?" htmlFor="balance">
-          <MoneyInput id="balance" value={balance} onChange={setBalance} />
+          <MoneyInput id="balance" value={balance} onChange={setBalance} allowNegative />
           <span className="font-sat text-[12px] text-esk-subtle">Vira seu saldo inicial. Você pode ajustar depois na sua conta.</span>
         </Field>
         <RememberMe checked={remember} onChange={setRemember} />

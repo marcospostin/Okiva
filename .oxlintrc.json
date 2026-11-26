@@ -1,0 +1,12 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "rules": {
+    "unicorn/no-thenable": "off",
+    "unicorn/no-invalid-fetch-options": "off"
+  },
+  "ignorePatterns": [
+    "dist",
+    "node_modules",
+    "src/services/database.types.ts"
+  ]
+}

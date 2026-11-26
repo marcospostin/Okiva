@@ -105,7 +105,8 @@ export function buildContext(state: AppState): AssistantContext {
     month,
     balance: balanceOf(state),
     spentThisMonth: summary.total,
-    spentLastMonth: summary.previousTotal,
+    // Mês passado inteiro (o resumo do mês atual compara só até o mesmo dia)
+    spentLastMonth: monthSummary(state, previousMonth(month)).total,
     budget: state.budget.total,
     byCategory: summary.byCategory,
     cards: state.cards.map(({ nickname, invoice, limit, dueDay }) => ({ nickname, invoice, limit, dueDay })),

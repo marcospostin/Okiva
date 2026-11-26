@@ -7,7 +7,7 @@
 import { normalizeLabel } from '../data/categories'
 import type { AppState, CategoryId, Transaction } from '../types'
 import { kindOf, round2 } from './ledger'
-import { monthKey } from './format'
+import { monthKey, shiftMonth, byDateDesc } from './format'
 
 export type ReportTab = 'categorias' | 'onde' | 'mes'
 export type Span = 1 | 3 | 6 | 12
@@ -16,11 +16,7 @@ export type Span = 1 | 3 | 6 | 12
 export type SourceFilter = 'all' | `card:${string}` | `acc:${string}`
 
 /** yyyy-mm somando meses */
-export function shiftMonth(key: string, delta: number) {
-  const [y, m] = key.split('-').map(Number)
-  const d = new Date(y, m - 1 + delta, 1)
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
-}
+export { shiftMonth }
 
 /** Meses do período, do mais antigo ao `anchor` */
 export function monthsOf(anchor: string, span: Span) {
@@ -40,7 +36,7 @@ export function expensesIn(state: AppState, months: string[], source: SourceFilt
   const set = new Set(months)
   return state.transactions
     .filter((t) => kindOf(t) === 'expense' && set.has(monthKey(t.date)) && matchesSource(state, t, source))
-    .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0))
+    .sort(byDateDesc)
 }
 
 export interface Group {

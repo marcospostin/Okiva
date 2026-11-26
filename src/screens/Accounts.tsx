@@ -1,7 +1,6 @@
 import { useState } from 'react'
-import { ArrowDownLeft, ArrowLeftRight, ChevronRight, CreditCard, Landmark, PiggyBank, Plus, Repeat, Scale, Wallet } from 'lucide-react'
+import { ArrowLeftRight, ChevronRight, Landmark, PiggyBank, Plus, Repeat, Scale, Wallet } from 'lucide-react'
 import { categoryMeta } from '../data/categories'
-import { CategoryRowIcon } from '../components/icons'
 import { cx, EmptyState, ListPanel, ListRow, Page, PrimaryButton, RoundButton, ScreenHeader, SearchField, SearchSummary, SectionHeader } from '../components/ui'
 import { brl, longDate, privateExpense, privateIncome, privateMoney, shortDate } from '../lib/format'
 import { accountKindLabel, incomeLabel, kindOf, nextDate } from '../lib/ledger'
@@ -10,6 +9,7 @@ import { searchTransactions } from '../lib/search'
 import { accountBalance, accountLabel, accountTotal, accountTransactions, balanceOf, subaccounts, todayISO, topAccounts, useStore } from '../state/store'
 import { useUI } from '../state/ui'
 import type { Account, AppState, Transaction } from '../types'
+import { TxIcon } from '../components/TxIcon'
 
 const KIND_ICON = { checking: Landmark, savings: PiggyBank, wallet: Wallet } as const
 
@@ -18,17 +18,12 @@ function AccountIcon({ kind }: { kind: Account['kind'] }) {
   return <Icon size={20} strokeWidth={1.6} className="text-esk-text-2" aria-hidden />
 }
 
-function TxIcon({ t }: { t: Transaction }) {
-  const k = kindOf(t)
-  if (k === 'income') return <ArrowDownLeft size={20} strokeWidth={1.7} className="text-esk-lime" aria-hidden />
-  if (k === 'invoice_payment') return <CreditCard size={19} strokeWidth={1.6} className="text-esk-text-2" aria-hidden />
-  if (k === 'transfer') return <ArrowLeftRight size={19} strokeWidth={1.6} className="text-esk-text-2" aria-hidden />
-  if (k === 'adjustment') return <Scale size={19} strokeWidth={1.6} className="text-esk-text-2" aria-hidden />
-  return <CategoryRowIcon category={t.category} name={t.name} size={20} />
-}
-
 /** Conta principal (a que aparece no cartão da lista) */
 const mainOf = (state: AppState, a: Account) => (a.parentId ? (state.accounts.find((x) => x.id === a.parentId) ?? a) : a)
+
+
+/** Saldo negativo (cheque especial) em vermelho claro, fácil de ver no fundo escuro */
+const moneyTone = (n: number, hidden: boolean) => (n < 0 && !hidden ? 'text-esk-negative' : 'text-white')
 
 export default function Accounts() {
   const { state } = useStore()
@@ -58,7 +53,7 @@ export default function Accounts() {
           <section aria-label="Suas contas" className="flex flex-col gap-[18px] pt-6">
             <div className="rounded-[34px] bg-esk-surface p-6 md:p-8">
               <p className="font-sat text-[15px] font-medium text-esk-muted">Saldo total</p>
-              <p className="pt-[6px] font-sat text-[38px] leading-[44px] font-medium tracking-[-1.71px] text-white">{privateMoney(brl(balanceOf(state)), hidden)}</p>
+              <p className={cx('pt-[6px] font-sat text-[38px] leading-[44px] font-medium tracking-[-1.71px]', moneyTone(balanceOf(state), hidden))}>{privateMoney(brl(balanceOf(state)), hidden)}</p>
               <p className="pt-2 font-sat text-[13px] text-esk-subtle">Soma de todas as contas e subcontas. Gastos no cartão saem daqui quando você paga a fatura.</p>
               {state.accounts.length > 1 && (
                 <div className="pt-4">
@@ -88,7 +83,7 @@ export default function Accounts() {
                           .join(' · ')}
                       </span>
                     </span>
-                    <span className="shrink-0 font-sat text-[17px] font-medium text-white">{privateMoney(brl(accountTotal(state, a.id)), hidden)}</span>
+                    <span className={cx('shrink-0 font-sat text-[17px] font-medium', moneyTone(accountTotal(state, a.id), hidden))}>{privateMoney(brl(accountTotal(state, a.id)), hidden)}</span>
                     <ChevronRight size={16} className="shrink-0 text-esk-subtle" aria-hidden />
                   </button>
                   {subs.length > 0 && (
@@ -102,7 +97,7 @@ export default function Accounts() {
                           >
                             <span className={cx('size-[6px] shrink-0 rounded-full', x.parentId ? 'bg-esk-lilac' : 'bg-esk-lime')} aria-hidden />
                             <span className="min-w-0 flex-1 truncate text-esk-text-2">{x.parentId ? x.name : accountKindLabel(x.kind)}</span>
-                            <span className="shrink-0 text-white">{privateMoney(brl(accountBalance(state, x.id)), hidden)}</span>
+                            <span className={cx('shrink-0', moneyTone(accountBalance(state, x.id), hidden))}>{privateMoney(brl(accountBalance(state, x.id)), hidden)}</span>
                           </button>
                         </li>
                       ))}
@@ -219,7 +214,7 @@ function AccountDetail({ account, onBack, onOpen }: { account: Account; onBack: 
           <section aria-label="Saldo" className="flex flex-col gap-[18px] pt-6">
             <div className="rounded-[34px] bg-esk-surface p-6 md:p-8">
               <p className="font-sat text-[15px] font-medium text-esk-muted">{isSub ? `Subconta de ${main.name}` : [account.nickname, subs.length ? 'total com subcontas' : accountKindLabel(account.kind)].filter(Boolean).join(' · ')}</p>
-              <p className="pt-[6px] font-sat text-[38px] leading-[44px] font-medium tracking-[-1.71px] text-white">{privateMoney(brl(total), hidden)}</p>
+              <p className={cx('pt-[6px] font-sat text-[38px] leading-[44px] font-medium tracking-[-1.71px]', moneyTone(total, hidden))}>{privateMoney(brl(total), hidden)}</p>
               <p className="pt-2 font-sat text-[13px] text-esk-subtle">
                 {account.reconciledOn ? `Conferido com o banco em ${longDate(account.reconciledOn)}` : 'Ainda não conferido com o banco'}
               </p>
@@ -301,7 +296,7 @@ function AccountDetail({ account, onBack, onOpen }: { account: Account; onBack: 
                     key={t.id}
                     index={i}
                     onClick={() => openSheet({ type: 'tx', id: t.id })}
-                    icon={<TxIcon t={t} />}
+                    icon={<TxIcon t={t} size={20} />}
                     title={
                       <span className="flex items-center gap-2">
                         <span className="truncate">{t.name}</span>

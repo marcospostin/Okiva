@@ -1,6 +1,4 @@
 import {
-  BookOpen,
-  Car,
   CircleHelp,
   HeartPulse,
   House,

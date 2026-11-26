@@ -57,6 +57,26 @@ export const parseISO = (s: string) => {
 }
 export const monthKey = (s: string) => s.slice(0, 7)
 
+/** Ordena do mais recente para o mais antigo (datas ISO). */
+export const byDateDesc = (a: { date: string }, b: { date: string }) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0)
+
+/** "2026-11" + delta meses → "2026-12" (delta negativo volta). */
+export function shiftMonth(key: string, delta: number) {
+  const [y, m] = key.split('-').map(Number)
+  const d = new Date(y, m - 1 + delta, 1)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+}
+
+/** Menor data aceita nos formulários (evita "0202" ou "20255" digitados à mão). */
+export const MIN_DATE = '2000-01-01'
+
+/** Data yyyy-mm-dd que existe de verdade (sem 31/02) e não é absurda (de 2000 a 2100). */
+export function isValidDate(s: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s) || s < MIN_DATE || s > '2100-12-31') return false
+  const d = parseISO(s)
+  return toISO(d) === s
+}
+
 export function relativeDay(iso: string, today: Date) {
   const d = parseISO(iso)
   const diff = Math.round((+new Date(today.getFullYear(), today.getMonth(), today.getDate()) - +d) / 864e5)

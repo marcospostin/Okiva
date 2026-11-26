@@ -72,6 +72,8 @@
   --color-esk-ink-2: #333333;
   /* Valores de lançamentos: saída (negativo) e entrada (positivo) */
   --color-esk-negative: #ff7b7b;
+  /* Saldo negativo sobre o cartão claro (degradê lilás/lima): vermelho escuro, contraste alto */
+  --color-esk-negative-strong: #b42318;
   --color-esk-positive: #6ee39a;
 
   --font-sans: 'Satoshi', 'Inter:Regular', ui-sans-serif, system-ui, sans-serif;

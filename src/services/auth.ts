@@ -6,7 +6,7 @@
  * signUp / signIn / signOut por chamadas ao backend mantendo as mesmas assinaturas.
  */
 import type { AppState, User } from '../types'
-import { ApiError, USE_SUPABASE } from './http'
+import { ApiError, USE_SUPABASE, NETWORK_ERROR, OFFLINE_MESSAGE } from './http'
 import { setRemember, sb } from './supabase'
 import { loadAccount, sbAccountApi } from './supabaseApi'
 
@@ -66,7 +66,7 @@ export function authError(err: { message?: string; status?: number } | null): Ap
   if (/already registered|already exists/i.test(msg)) return new ApiError('Esse e-mail já tem conta. Entre com sua senha.', 409)
   if (/password should be|weak password/i.test(msg)) return new ApiError('A senha precisa ter pelo menos 6 caracteres.', 422)
   if (/rate limit|too many/i.test(msg)) return new ApiError('Muitas tentativas. Espere alguns minutos e tente de novo.', 429)
-  if (/fetch|network/i.test(msg)) return new ApiError('Sem conexão. Confira sua internet e tente de novo.', 0)
+  if (NETWORK_ERROR.test(msg)) return new ApiError(OFFLINE_MESSAGE, 0)
   return new ApiError('Não deu para entrar agora. Tente de novo.', err?.status ?? 500)
 }
 
@@ -87,7 +87,7 @@ async function supabaseSignUp(input: { name: string; email: string; password: st
     password: input.password,
     options: {
       // O trigger do banco cria o profile com nome e saldo inicial (funciona com ou sem confirmação de e-mail)
-      data: { name: input.name.trim() || nameFromEmail(email), balance: input.balance > 0 ? input.balance.toFixed(2) : undefined },
+      data: { name: input.name.trim() || nameFromEmail(email), balance: input.balance !== 0 ? input.balance.toFixed(2) : undefined },
       emailRedirectTo: window.location.origin,
     },
   })
@@ -200,14 +200,18 @@ async function endSupabaseSession() {
 /** Sessão salva (ou vinda do link de confirmação): devolve a conta carregada do banco. */
 export async function restoreSupabaseSession(): Promise<AppState | null> {
   if (!USE_SUPABASE) return null
-  const { data } = await sb().auth.getSession()
+  const { data, error } = await sb().auth.getSession()
+  if (error && /fetch|network|timed? ?out|abort/i.test(error.message)) throw new ApiError(OFFLINE_MESSAGE, 0)
   if (!data.session) return null
   try {
     // Recarregou a página na demonstração: a foto escolhida continua (vem da aba)
     const state = withDemoAvatar(await applyPendingAvatar(await loadAccount()))
     await trackActiveUser()
     return state
-  } catch {
+  } catch (err) {
+    // Sem internet ou servidor lento: mantém a sessão e deixa tentar de novo (não pede a senha outra vez)
+    if (err instanceof ApiError && (err.status === 0 || err.status === 408 || err.status >= 500)) throw err
+    // Sessão que não vale mais (expirou, conta apagada): volta ao login
     await sb().auth.signOut({ scope: 'local' })
     return null
   }

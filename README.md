@@ -1,71 +1,72 @@
 # Okiva
 
-Seu assistente financeiro para gastos e conquistas.
+Veja com clareza suas contas e cartões e leve seu dinheiro mais longe.
 
-App de finanças pessoais, mobile-first e com a mesma home no desktop, só mais larga. A pessoa registra o próprio dinheiro à mão (estágio 1). No **Okiva Plus** (estágio 2), a IA lê a fatura e responde no chat.
+App de finanças pessoais: contas e subcontas, cartões e faturas (com crédito e adiantamento de parcelas),
+compras parceladas, tetos por categoria, metas e relatórios. No **Okiva Plus** (estágio 2), a IA lê a fatura
+e responde no chat. Publicado em [okiva.vercel.app](https://okiva.vercel.app).
 
 ## Stack
 
-- React 19 + TypeScript + Vite
-- Tailwind CSS v4 (tokens em `src/index.css`, `@theme`)
-- Estado: React Context + `useReducer`, persistido em `localStorage`
-- Ícones: SVGs do Figma em `public/assets` e `lucide-react` como complemento
+- React 19 + TypeScript + Vite 8, Tailwind CSS v4 (tokens em `src/index.css`, `@theme`)
+- Supabase: Auth (e-mail/senha e demonstração anônima), Postgres com RLS, triggers e funções (as regras de
+  saldo e fatura rodam no banco), Storage para fotos
+- Estado no app: React Context + `useReducer` (`src/state/store.tsx`), carregado do Supabase ao entrar
+- Deploy na Vercel a partir do GitHub (`main`), com CSP e cabeçalhos em `vercel.json`
 
 ```bash
 pnpm install
-pnpm dev     # desenvolvimento
-pnpm build   # build de produção
+pnpm dev         # desenvolvimento
+pnpm build       # checa os tipos e gera o build de produção
+pnpm typecheck   # só os tipos
+pnpm lint        # oxlint (regras em .oxlintrc.json)
+pnpm test        # testes das regras de dinheiro (vitest)
 ```
+
+Sem `VITE_SUPABASE_URL` e `VITE_SUPABASE_ANON_KEY`, o app roda com dados de exemplo locais.
 
 ## Estrutura
 
 ```
 src/
-  App.tsx                 shell: login → views + sheets + toast (com lazy/code splitting)
-  index.css               tokens --color-esk-*, gradientes --esk-gradient-*, fontes, breakpoints
-  types.ts                Transaction, Card, Goal, Budget, AppState
-  data/mock.ts            dados de referência (Lucas, R$ 14.500, cartões, metas) + TODAY
-  data/categories.ts      categorias e cores
-  state/store.tsx         reducer, persistência e seletores (saldo, mês, vencimentos)
-  state/ui.tsx            pilha de views + sheet aberta + toast (integra com o botão voltar)
-  services/ai.ts          ESTÁGIO 2: mock com o mesmo contrato do backend OpenAI
-  components/ui.tsx       Page, ScreenHeader, Sheet, ListPanel, FeatureCard, Ring, forms…
-  components/icons.tsx    ícones de categoria/meta
-  screens/                Home, Cards, Goals, Invoice*, Assistant*, Login
-  sheets/SheetHost.tsx    Adicionar/editar gasto, detalhe, cartão, meta, guardar, teto, conta
+  App.tsx              login → telas + sheets + toast; barra lateral (≥ 800px) ou barra de baixo (celular)
+  index.css            tokens, cores, breakpoints e a variante `wide` (colunas)
+  types.ts             Transaction, Card, Account, Goal, AppState…
+  lib/ledger.ts        regras de dinheiro (saldo, fatura, crédito, parcelas, adiantar) — as mesmas do banco
+  lib/format.ts        datas e dinheiro (pt-BR); validação de data
+  state/store.tsx      reducer e seletores (saldo, mês, vencimentos)
+  state/ui.tsx         navegação, sheet aberta, toast
+  services/            Supabase (supabaseApi.ts), auth, IA (ai.ts), erros e tempo limite (http.ts, supabase.ts)
+  screens/             Home, Contas, Cartões, Metas, Relatórios, Fatura*, Assistente*, Ajustes, Login
+  sheets/              formulários (lançamento, pagar fatura, adiantar parcelas, conferir, conta, cartão, meta…)
+supabase/
+  migrations/          schema, RLS, triggers e funções, em ordem (ver docs/supabase.md)
+  tests/regras_banco.sql   teste das regras do banco (rode no SQL Editor; termina com erro de propósito)
+docs/                  Supabase, deploy na Vercel, tokens de design
 ```
 
-`*` só aparece com o Okiva Plus ligado (folha Conta → “Okiva Plus”).
+`*` só aparece com o Okiva Plus.
 
-## Navegação
+## Layout
 
-São poucas telas cheias e o resto abre como folha (sheet). Não há tab bar nem sidebar.
+| Tela | Navegação | Conteúdo |
+|------|-----------|----------|
+| Celular (< 800px) | barra de baixo | uma coluna |
+| Tablet em pé (≥ 800px, retrato) | barra lateral | uma coluna, como no celular |
+| Tablet deitado (≥ 800px, paisagem) e computador (≥ 1100px) | barra lateral | duas colunas |
+| Full HD (≥ 1920px) | barra lateral | container de 1680px |
 
-- Estágio 1: **Home**, **Cartões**, **Metas**. Folhas: Adicionar, Detalhe, Cartão, Meta, Guardar, Teto, Conta.
-- Estágio 2: + **Fatura** (atalho na home) e **Assistente** (card lilás em Metas ou botão no hero).
+## Regras importantes
 
-## Breakpoints
+- **Saldo** = saldos iniciais + receitas − gastos fora do cartão − pagamentos de fatura + ajustes.
+  Transferência não muda o total. Saldo pode ser negativo (cheque especial).
+- **Fatura** = fatura inicial + compras no cartão − pagamentos. Negativa = crédito (pagou a mais): libera
+  limite e vira desconto na próxima fatura.
+- **Cartão removido**: as compras ficam no histórico e fora do saldo; os pagamentos continuam pagamentos.
+- Operações em várias etapas (à vista ↔ parcelado, importar fatura com parcelas, adiantar) são uma
+  transação só no banco.
 
-| Faixa     | Largura          | Layout                                        |
-|-----------|------------------|-----------------------------------------------|
-| Mobile    | < 800px          | uma coluna (protótipo do Figma)               |
-| `md`      | ≥ 800px          | duas colunas (saldo e atalhos fixos à esquerda)|
-| `lg`      | ≥ 1100px         | números maiores, mais respiro                 |
-| `3xl`     | ≥ 1920px (FHD)   | container de 1680px; mês e transações lado a lado |
-| QHD / 4K  | ≥ 2560 / 3840px  | `zoom` 1.33 / 2 sobre o layout Full HD        |
+## IA (Okiva Plus)
 
-## Estágio 2: ligar a OpenAI
-
-`src/services/ai.ts` simula as respostas. Para produção, troque o corpo de cada função por um `fetch` para rotas no servidor (Next.js route handlers, Edge Functions etc.). **A chave da OpenAI nunca vai para o client.**
-
-- `POST /api/invoice` (multipart) → `InvoiceResult`. Usa visão para foto e input de arquivo para PDF.
-- `POST /api/assistant` `{ question, context }` → `AssistantReply`, com streaming quando possível.
-- `POST /api/insight` `{ context }` → `Insight`.
-
-O `context` é o `AppState` (gastos, cartões, metas), então as respostas usam o dinheiro da pessoa.
-
-## Próximos passos
-
-- Persistência real (auth, transações, cartões, metas, mídia) no lugar do `localStorage`
-- Backend OpenAI para os três endpoints acima
-- `TODAY` (em `data/mock.ts`) já usa a data local atual; a constante existe para manter os cálculos de data consistentes.
+`src/services/ai.ts` simula as respostas na demonstração. Para produção, as chamadas vão para um backend
+(`VITE_API_URL`) com a chave da IA **só no servidor**, nunca no app.

@@ -1,133 +1,30 @@
-import { ArrowDownLeft, ArrowLeftRight, Check, ChevronDown, ChevronLeft, ChevronRight, CircleHelp, CreditCard, Repeat, Scale, Sparkles } from 'lucide-react'
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
+import { ChevronDown, ChevronRight, CircleHelp, Repeat, Sparkles } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { categoryMeta, UNCATEGORIZED } from '../data/categories'
-import { Asset, CategoryRowIcon, CategoryTileIcon } from '../components/icons'
+import { Asset, CategoryTileIcon } from '../components/icons'
 import { Avatar, CountUp, cx, Page, SearchField, SearchSummary } from '../components/ui'
 import { searchTransactions } from '../lib/search'
 import { movementAmount, movementSubtitle } from '../lib/movements'
 import { InstallmentsBlock } from '../components/InstallmentsBlock'
-import { brl, brlShort, capitalize, privateExpense, privateIncome, privateMoney, monthName, pct, relativeDay } from '../lib/format'
+import { brl, brlShort, privateExpense, privateIncome, privateMoney, monthName, pct, relativeDay, byDateDesc } from '../lib/format'
 import { incomeLabel, kindOf } from '../lib/ledger'
 import { today } from '../data/mock'
 import { toISO } from '../lib/format'
-import {
-  availableMonths,
-  balanceOf,
-  currentMonth,
-  methodLabel,
-  monthSummary,
-  previousMonth,
-  accountName,
-  topAccounts,
-  uncategorized,
-  useStore,
-} from '../state/store'
-import type { Transaction } from '../types'
+import { availableMonths, balanceOf, currentMonth, methodLabel, monthSummary, previousMonth, accountName, topAccounts, uncategorized, useStore } from '../state/store'
 import { useUI } from '../state/ui'
 import { Donut } from '../components/charts'
 import { rememberReportsOpen, type ReportTab } from '../lib/reports'
 import { LockBadge, PlusHint, PLUS_PITCH } from '../components/PlusHint'
 import { Isotype } from '../components/Isotype'
+import { TxIcon } from '../components/TxIcon'
+import { MonthPicker, monthLabel } from './home/MonthPicker'
+import { CategoryTiles } from './home/CategoryTiles'
 
-const monthLabel = (key: string) => {
-  const name = capitalize(monthName(Number(key.slice(5, 7)) - 1))
-  return key.slice(0, 4) === currentMonth().slice(0, 4) ? name : `${name} ${key.slice(0, 4)}`
-}
-
-/**
- * Seletor de mês. Fechado mostra só o nome; aberto marca "(atual)" e deixa os meses
- * que ainda não chegaram (só parcelas) num tom mais leve.
- */
-/** Rola só a lista (não a página) até o mês escolhido */
-const centerInList = (el: HTMLLIElement | null) => {
-  const list = el?.parentElement
-  if (el && list) list.scrollTop = el.offsetTop - list.clientHeight / 2 + el.clientHeight / 2
-}
-
-function MonthPicker({ months, value, onChange }: { months: string[]; value: string; onChange: (m: string) => void }) {
-  const [open, setOpen] = useState(false)
-  const box = useRef<HTMLDivElement>(null)
-  const current = currentMonth()
-  useEffect(() => {
-    if (!open) return
-    const onDown = (e: PointerEvent) => {
-      if (box.current && !box.current.contains(e.target as Node)) setOpen(false)
-    }
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setOpen(false)
-    document.addEventListener('pointerdown', onDown)
-    document.addEventListener('keydown', onKey)
-    return () => {
-      document.removeEventListener('pointerdown', onDown)
-      document.removeEventListener('keydown', onKey)
-    }
-  }, [open])
-  const future = value > current
-  return (
-    <div ref={box} className="relative">
-      <button
-        type="button"
-        aria-haspopup="listbox"
-        aria-expanded={open}
-        aria-label={`Escolher mês: ${monthLabel(value)}`}
-        onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-2 rounded-[16px] bg-esk-elevated py-[6px] pr-3 pl-3 font-inter-m text-[12px] leading-[1.3] font-medium transition hover:bg-esk-hover"
-      >
-        <span className={future ? 'text-esk-muted' : 'text-white'}>{monthLabel(value)}</span>
-        <ChevronDown size={12} className={cx('text-esk-muted transition', open && 'rotate-180')} aria-hidden />
-      </button>
-      {open && (
-        <ul
-          role="listbox"
-          aria-label="Meses"
-          className="absolute top-[calc(100%+6px)] right-0 z-30 max-h-[300px] min-w-[220px] animate-rise overflow-y-auto rounded-[18px] bg-esk-elevated p-1 shadow-[0_12px_32px_rgba(0,0,0,0.5)] ring-1 ring-esk-track"
-        >
-          {months.map((m) => {
-            const isFuture = m > current
-            const selected = m === value
-            return (
-              <li key={m} role="option" aria-selected={selected} ref={selected ? centerInList : undefined}>
-                <button
-                  type="button"
-                  onClick={() => {
-                    onChange(m)
-                    setOpen(false)
-                  }}
-                  className={cx(
-                    'flex w-full items-center justify-between gap-3 rounded-[14px] px-3 py-[9px] text-left font-inter-m text-[13px] font-medium transition hover:bg-white/[0.05]',
-                    isFuture ? 'text-esk-muted' : 'text-white',
-                    selected && 'bg-white/[0.06]',
-                  )}
-                >
-                  <span className="whitespace-nowrap">
-                    {monthLabel(m)}
-                    {m === current && <span className="text-esk-lime"> (atual)</span>}
-                    {isFuture && <span className="ml-2 rounded-[6px] bg-white/[0.06] px-[5px] py-px text-[10px] text-esk-muted">previsto</span>}
-                  </span>
-                  {selected && <Check size={14} className="text-esk-lime" aria-hidden />}
-                </button>
-              </li>
-            )
-          })}
-        </ul>
-      )}
-    </div>
-  )
-}
-
-function TxRowIcon({ t }: { t: Transaction }) {
-  const k = kindOf(t)
-  if (k === 'income') return <ArrowDownLeft size={20} strokeWidth={1.7} className="text-esk-lime" aria-hidden />
-  if (k === 'invoice_payment') return <CreditCard size={19} strokeWidth={1.6} className="text-esk-text-2" aria-hidden />
-  if (k === 'transfer') return <ArrowLeftRight size={19} strokeWidth={1.6} className="text-esk-text-2" aria-hidden />
-  if (k === 'adjustment') return <Scale size={19} strokeWidth={1.6} className="text-esk-text-2" aria-hidden />
-  return <CategoryRowIcon category={t.category} name={t.name} />
-}
-
-/** Até 3 cards cabem lado a lado em qualquer largura; acima disso vira carrossel. */
-const STATIC_TILES = 3
 /** Máximo de cards na Home (o último vira "Ver todos" somando o restante). */
 const MAX_TILES_WIDE = 8
+
 const MAX_TILES_NARROW = 6
+
 /** Cor do trecho "restante" na barra e do marcador no card "Ver todos". */
 const REST_COLOR = '#4e4e55'
 
@@ -147,74 +44,6 @@ function useMediaQuery(query: string) {
     }
   }, [query])
   return matches
-}
-
-/**
- * Cards de categoria do mês.
- * - Até 3: grade fixa de 3 colunas (igual ao design original).
- * - Mais de 3: carrossel com rolagem e encaixe (scroll-snap). Mostra ~2,3 cards no
- *   celular e ~3,3 no tablet/desktop: o card cortado na borda indica que há mais.
- *   No celular o carrossel vai até a borda da tela. Com mouse/trackpad (qualquer
- *   largura) aparecem setas; em tela de toque, desliza com o dedo.
- */
-function CategoryTiles({ count, children }: { count: number; children: ReactNode }) {
-  const rail = useRef<HTMLDivElement>(null)
-  const [edges, setEdges] = useState({ prev: false, next: true })
-  const carousel = count > STATIC_TILES
-
-  const update = useCallback(() => {
-    const el = rail.current
-    if (!el) return
-    setEdges({ prev: el.scrollLeft > 4, next: el.scrollLeft + el.clientWidth < el.scrollWidth - 4 })
-  }, [])
-
-  useEffect(() => {
-    if (!carousel) return
-    update()
-    window.addEventListener('resize', update)
-    return () => window.removeEventListener('resize', update)
-  }, [carousel, count, update])
-
-  if (!carousel) return <div className="grid grid-cols-3 gap-3">{children}</div>
-
-  const go = (dir: 1 | -1) => {
-    const el = rail.current
-    if (el) el.scrollBy({ left: dir * el.clientWidth * 0.75, behavior: 'smooth' })
-  }
-
-  return (
-    <div className="@container relative min-w-0" role="region" aria-roledescription="carrossel" aria-label="Categorias do mês">
-      <div
-        ref={rail}
-        onScroll={update}
-        className={cx(
-          '-mx-[32px] flex snap-x snap-mandatory scroll-px-[32px] gap-3 overflow-x-auto px-[32px] pb-1 [scrollbar-width:none] md:mx-0 md:scroll-px-0 md:px-0 [&::-webkit-scrollbar]:hidden',
-          // Quantos cards cabem depende da largura da coluna (não da tela): ~2.3 até 460px
-          // (celular e tablet, onde a coluna é estreita), ~3.3 a partir daí (computador)
-          '[&>*]:shrink-0 [&>*]:basis-[calc((100%-12px)/2.3)] [&>*]:snap-start @min-[460px]:[&>*]:basis-[calc((100%-24px)/3.3)]',
-        )}
-      >
-        {children}
-      </div>
-      {(['prev', 'next'] as const).map((side) => (
-        <button
-          key={side}
-          type="button"
-          aria-label={side === 'prev' ? 'Categorias anteriores' : 'Mais categorias'}
-          onClick={() => go(side === 'prev' ? -1 : 1)}
-          tabIndex={edges[side] ? 0 : -1}
-          className={cx(
-            // Arrows on any width when there is a mouse/trackpad (hover); touch screens swipe instead
-            'absolute top-1/2 hidden size-[36px] -translate-y-1/2 place-items-center rounded-full bg-esk-ink/85 text-white shadow-[0_6px_20px_rgba(0,0,0,0.45)] ring-1 ring-white/10 backdrop-blur transition duration-200 hover:bg-esk-ink [@media(hover:hover)]:grid',
-            side === 'prev' ? 'left-[-10px] md:-left-[14px]' : 'right-[-10px] md:-right-[14px]',
-            edges[side] ? 'opacity-100' : 'pointer-events-none opacity-0',
-          )}
-        >
-          {side === 'prev' ? <ChevronLeft size={18} strokeWidth={2} /> : <ChevronRight size={18} strokeWidth={2} />}
-        </button>
-      ))}
-    </div>
-  )
 }
 
 export default function Home() {
@@ -250,7 +79,7 @@ export default function Home() {
   const searching = query.trim().length > 0
   const results = useMemo(() => {
     if (!searching) return []
-    const all = [...state.transactions].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0))
+    const all = [...state.transactions].sort(byDateDesc)
     return searchTransactions(state, all, query)
   }, [state, query, searching])
   const listSource = searching ? results : summary.transactions
@@ -279,7 +108,7 @@ export default function Home() {
 
   // Limite de cards: 8 a partir do tablet, 6 no celular. Passou disso, o último card
   // vira "Ver todos" e soma as categorias que não aparecem (o mesmo vale na barra).
-  const wide = useMediaQuery('(min-width: 768px)')
+  const wide = useMediaQuery('(min-width: 800px)')
   const maxTiles = wide ? MAX_TILES_WIDE : MAX_TILES_NARROW
   const overflow = tiles.length > maxTiles
   const shownTiles = overflow ? tiles.slice(0, maxTiles - 1) : tiles
@@ -377,7 +206,11 @@ export default function Home() {
                 </button>
               </div>
               <p
-                className="font-inter-m text-[min(43px,var(--fit))] leading-[1.35] font-medium tracking-[-0.04em] whitespace-nowrap text-esk-ink lg:text-[min(56px,var(--fit))] 3xl:text-[min(66px,var(--fit))] 3xl:tracking-[-0.045em]"
+                className={cx(
+                  'font-inter-m text-[min(43px,var(--fit))] leading-[1.35] font-medium tracking-[-0.04em] whitespace-nowrap transition-colors lg:text-[min(56px,var(--fit))] 3xl:text-[min(66px,var(--fit))] 3xl:tracking-[-0.045em]',
+                  // Negativo (cheque especial): vermelho escuro, fácil de ver no cartão claro
+                  balance < 0 && !hidden ? 'text-esk-negative-strong' : 'text-esk-ink',
+                )}
                 // Cabe sempre no cartão: cada caractere ocupa ~0,5 da altura da letra, então a letra
                 // pode ter até 96% da largura útil dividida por (0,5 × caracteres)
                 style={{ '--fit': `${Math.min(16, 192 / Math.max(brl(balance).length, 1))}cqw` } as CSSProperties}
@@ -486,7 +319,11 @@ export default function Home() {
                       <p className={cx('font-inter-m text-[12px] font-medium', variation <= 0 ? 'text-esk-lime' : 'text-white')}>
                         {variation <= 0 ? `↘ ${Math.abs(variation)}% menos` : `↗ ${variation}% mais`}
                       </p>
-                      <p className="font-inter text-[10px] text-esk-muted">que em {monthName(Number(previousMonth(month).slice(5, 7)) - 1)}</p>
+                      <p className="font-inter text-[10px] text-esk-muted">
+                        {summary.previousUntilDay
+                          ? `que até dia ${summary.previousUntilDay} de ${monthName(Number(previousMonth(month).slice(5, 7)) - 1)}`
+                          : `que em ${monthName(Number(previousMonth(month).slice(5, 7)) - 1)}`}
+                      </p>
                     </div>
                   )}
                 </div>
@@ -771,7 +608,7 @@ export default function Home() {
                         className="-mx-2 flex min-h-[62px] w-[calc(100%+16px)] items-center gap-3 rounded-[18px] px-2 py-2 text-left transition hover:bg-white/[0.03]"
                       >
                         <span className="grid size-[44px] shrink-0 place-items-center rounded-[22px] bg-esk-row">
-                          <TxRowIcon t={t} />
+                          <TxIcon t={t} />
                         </span>
                         <span className="flex min-w-0 flex-1 flex-col gap-[3px] leading-[1.4]">
                           <span className="flex min-w-0 items-center gap-[6px]">

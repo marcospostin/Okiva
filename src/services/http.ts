@@ -62,6 +62,20 @@ function getToken() {
   }
 }
 
+/**
+ * Mensagens do banco/servidor que podem ir direto para a tela: as que o Okiva escreveu (em
+ * português, ex.: "Parcelas entre 2 e 48."). As geradas pelo Postgres/PostgREST (em inglês, com
+ * nomes de tabelas e colunas) nunca aparecem: viram um texto amigável.
+ */
+const TECHNICAL = /violates|constraint|relation\b|column\b|row-level security|duplicate key|null value|invalid input|syntax|permission denied|does not exist|out of range|function |operator |JSON|JWT|PGRST|schema|policy|value too long|character varying|overflow|for type|\bp_[a-z_]+/i
+
+/** Falha de rede (sem internet, servidor fora): mesmo texto em todo o app. */
+export const NETWORK_ERROR = /fetch|network|Load failed/i
+export const OFFLINE_MESSAGE = 'Sem conexão. Confira sua internet e tente de novo.'
+
+export const friendlyMessage = (msg: string | undefined | null): string | undefined =>
+  msg && msg.trim() && !TECHNICAL.test(msg) ? msg.trim() : undefined
+
 const FRIENDLY: Record<number, string> = {
   0: 'Sem conexão. Confira sua internet e tente de novo.',
   401: 'Sua sessão expirou. Entre de novo.',
@@ -98,7 +112,7 @@ export async function request<T>(
       },
       body: body === undefined ? undefined : isForm ? body : JSON.stringify(body),
     })
-  } catch (err) {
+  } catch {
     if (opts.signal?.aborted) throw new DOMException('Aborted', 'AbortError')
     throw new ApiError(FRIENDLY[ctrl.signal.reason === 'timeout' ? 408 : 0], ctrl.signal.reason === 'timeout' ? 408 : 0)
   } finally {
@@ -108,7 +122,7 @@ export async function request<T>(
   if (res.status === 204) return undefined as T
   const data = await res.json().catch(() => null)
   if (!res.ok) {
-    const message = (data && typeof data.message === 'string' && data.message) || FRIENDLY[res.status] || 'Algo deu errado. Tente de novo.'
+    const message = friendlyMessage(data && typeof data.message === 'string' ? data.message : undefined) || FRIENDLY[res.status] || 'Algo deu errado. Tente de novo.'
     throw new ApiError(message, res.status, data?.code)
   }
   return data as T

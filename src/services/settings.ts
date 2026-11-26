@@ -5,7 +5,7 @@
  */
 import type { NotificationPrefs } from '../types'
 import type { Json } from './database.types'
-import { ApiError, mockDelay, USE_SUPABASE } from './http'
+import { ApiError, friendlyMessage, mockDelay, USE_SUPABASE, NETWORK_ERROR, OFFLINE_MESSAGE } from './http'
 import { sb } from './supabase'
 import { authError } from './auth'
 
@@ -41,7 +41,7 @@ export function maskEmail(email: string) {
 function sendError(err: { message?: string; status?: number }) {
   const msg = err.message ?? ''
   if (/rate limit|too many|seconds/i.test(msg)) return new ApiError('Muitos pedidos seguidos. Espere alguns minutos e tente de novo.', 429)
-  if (/fetch|network/i.test(msg)) return new ApiError('Sem conexão. Confira sua internet e tente de novo.', 0)
+  if (NETWORK_ERROR.test(msg)) return new ApiError(OFFLINE_MESSAGE, 0)
   if (/invalid.*email|email.*invalid/i.test(msg)) return new ApiError('Confira o e-mail digitado.', 422)
   return new ApiError('Não deu para enviar o e-mail agora. Tente de novo em alguns minutos.', err.status ?? 500)
 }
@@ -175,7 +175,9 @@ export const supportApi = {
       .insert({ kind: input.kind, message: input.message.trim(), rating: input.rating ?? null, meta: (input.meta ?? deviceInfo()) as never })
     if (error) {
       // Limites do banco (demonstração, muitas mensagens seguidas) já vêm com a mensagem pronta
-      if (error.code === 'P0001' || error.code === '42501') throw new ApiError(error.message, 429)
+      const own = friendlyMessage(error.message)
+      if ((error.code === 'P0001' || error.code === '42501') && own) throw new ApiError(own, 429)
+      if (/fetch|network|Failed to fetch|Load failed/i.test(error.message)) throw new ApiError(OFFLINE_MESSAGE, 0)
       throw new ApiError('Não deu para enviar agora. Tente de novo.', 500)
     }
   },

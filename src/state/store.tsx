@@ -4,7 +4,7 @@ import { normalizeLabel, SUGGESTED_CATEGORIES } from '../data/categories'
 import { savePrefs } from '../services/supabaseApi'
 import { DEMO_USER, initialState, today } from '../data/mock'
 import { restoreSession, sessionEmail, signOut } from '../services/auth'
-import { monthKey, toISO } from '../lib/format'
+import { monthKey, toISO, shiftMonth, byDateDesc } from '../lib/format'
 import { accountEffect, adjustInvoice, balanceEffect, ensureAccounts, isExpense, kindOf, processDueLocal, round2 } from '../lib/ledger'
 import type { Account, AppState, Budget, CapAlert, Card, CategoryId, CategoryRule, CustomCategory, Goal, GoalDeposit, InvoiceImport, NotificationPrefs, Recurrence, Stage, Transaction, User } from '../types'
 
@@ -76,7 +76,6 @@ function addToGoal(goals: Goal[], goalId: string, delta: number) {
   )
 }
 
-const byDateDesc = (a: { date: string }, b: { date: string }) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0)
 
 function reducer(state: AppState, action: Action): AppState {
   switch (action.type) {
@@ -465,11 +464,7 @@ export function useStore() {
 export const todayISO = () => toISO(today())
 export const currentMonth = () => monthKey(todayISO())
 
-export function previousMonth(key: string) {
-  const [y, m] = key.split('-').map(Number)
-  const d = new Date(y, m - 2, 1)
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
-}
+export const previousMonth = (key: string) => shiftMonth(key, -1)
 
 /** Saldo de hoje: soma das contas (gasto no cartão só sai ao pagar a fatura). */
 export function balanceOf(state: AppState) {
@@ -510,7 +505,7 @@ export function accountTransactions(state: AppState, accountId: string) {
       if (k === 'expense' && t.removedCard) return false
       return (t.accountId ?? first) === accountId
     })
-    .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0))
+    .sort(byDateDesc)
 }
 
 export function accountName(state: AppState, id?: string) {
@@ -540,6 +535,8 @@ export interface MonthSummary {
   /** Só gastos (o que conta no teto) */
   total: number
   previousTotal: number
+  /** Mês em andamento: o anterior foi somado só até este dia (comparação justa) */
+  previousUntilDay?: number
   /** Só gastos com categoria */
   byCategory: { category: CategoryId; amount: number }[]
   /** Gastos do mês ainda sem categoria (contam no total, em nenhum teto) */
@@ -554,11 +551,15 @@ export interface MonthSummary {
 export function monthSummary(state: AppState, key: string): MonthSummary {
   const txs = state.transactions
     .filter((t) => monthKey(t.date) === key)
-    .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0))
+    .sort(byDateDesc)
   const expenses = txs.filter(isExpense)
   const prevKey = previousMonth(key)
+  // Mês em andamento: compara com o mesmo período do mês anterior (até o mesmo dia). Antes comparava
+  // o mês pela metade com o mês anterior inteiro, e no começo do mês sempre aparecia "xx% menos".
+  const partial = key === currentMonth()
+  const untilDay = Number(todayISO().slice(8, 10))
   const previousTotal = state.transactions
-    .filter((t) => isExpense(t) && monthKey(t.date) === prevKey)
+    .filter((t) => isExpense(t) && monthKey(t.date) === prevKey && (!partial || Number(t.date.slice(8, 10)) <= untilDay))
     .reduce((s, t) => s + t.amount, 0)
   const map = new Map<CategoryId, number>()
   for (const t of expenses) if (t.category !== null) map.set(t.category, (map.get(t.category) ?? 0) + t.amount)
@@ -569,6 +570,7 @@ export function monthSummary(state: AppState, key: string): MonthSummary {
     key,
     total: round2(expenses.reduce((s, t) => s + t.amount, 0)),
     previousTotal: round2(previousTotal),
+    previousUntilDay: partial ? untilDay : undefined,
     byCategory,
     uncategorized: round2(expenses.filter((t) => t.category === null).reduce((s, t) => s + t.amount, 0)),
     transactions: txs,
@@ -596,7 +598,7 @@ export function uncategorized(state: AppState) {
       seen.add(g)
       return true
     })
-    .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0))
+    .sort(byDateDesc)
 }
 
 /** Categoria aprendida para um nome ("PAG*JOSE" -> Alimentação), se a pessoa ainda tem a categoria. */

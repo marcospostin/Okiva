@@ -77,5 +77,5 @@ Se aparecer "Toque em Entrar para abrir a conta de demonstração", as variávei
 
 ## E DATABASE_URL / DIRECT_URL?
 
-São strings de conexão direta ao Postgres (com usuário e **senha do banco**). Servem para **Prisma, migrations e ferramentas de servidor**. O `prisma/schema.prisma` do projeto é só documentação e o app não usa Prisma em produção, então **não cadastre** na Vercel. Se for usar Prisma localmente, coloque em um `.env` fora do git:
+São strings de conexão direta ao Postgres (com usuário e **senha do banco**). Servem para **Prisma, migrations e ferramentas de servidor**. O app não usa Prisma nem conexão direta ao Postgres, então **não cadastre** na Vercel. Se um dia precisar delas localmente, coloque em um `.env` fora do git:
 - Supabase → **Connect → ORMs → Prisma**: copie `DATABASE_URL` (pooler, porta 6543, `?pgbouncer=true`) e `DIRECT_URL` (conexão direta, porta 5432), trocando `[YOUR-PASSWORD]` pela senha do banco (Database → Settings → Reset database password, se não souber).

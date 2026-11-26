@@ -73,8 +73,12 @@ export default function Settings() {
     const a = document.createElement('a')
     a.href = url
     a.download = `okiva-meus-dados-${toISO(today())}.json`
+    // No Safari/iOS (e às vezes no Firefox) o link precisa estar na página e o endereço do arquivo
+    // não pode ser liberado logo depois do clique; senão o download sai vazio ou é cancelado
+    document.body.append(a)
     a.click()
-    URL.revokeObjectURL(url)
+    a.remove()
+    window.setTimeout(() => URL.revokeObjectURL(url), 60_000)
     notify('Arquivo com seus dados baixado')
   }
 

@@ -26,7 +26,7 @@ import type {
   RecurrenceInput,
   TransactionInput,
 } from './finance'
-import { ApiError, StaleError } from './http'
+import { ApiError, friendlyMessage, StaleError, NETWORK_ERROR, OFFLINE_MESSAGE } from './http'
 import { sb } from './supabase'
 
 type Tables = Database['public']['Tables']
@@ -38,11 +38,19 @@ type Row<T extends keyof Tables> = Tables[T]['Row']
 export function toApiError(error: PostgrestError | { message: string; code?: string; status?: number } | null): ApiError {
   const code = error && 'code' in error ? error.code : undefined
   const msg = error?.message ?? ''
-  if (code === '23505') return new ApiError('Já existe um item com esse nome.', 409, code)
-  if (code === '42501' || /row-level security|permission denied/i.test(msg)) return new ApiError('Você não tem acesso a isso. Entre de novo.', 403, code)
-  if (code === '23514' || code === '22023' || code === '23503' || code === 'P0001') return new ApiError(msg || 'Confira os dados e tente de novo.', 422, code)
-  if (code === 'PGRST116') return new ApiError('Não encontramos esse item.', 404, code)
-  if (/fetch|network|Failed to fetch/i.test(msg)) return new ApiError('Sem conexão. Confira sua internet e tente de novo.', 0, code)
+  // Só as mensagens escritas pelo Okiva (raise exception em português) vão para a tela
+  const own = friendlyMessage(msg)
+  if (/timed? ?out|timeout|aborted|AbortError/i.test(msg)) return new ApiError('O servidor demorou para responder. Tente de novo.', 408, code)
+  if (NETWORK_ERROR.test(msg)) return new ApiError(OFFLINE_MESSAGE, 0, code)
+  if (code === 'PGRST301' || code === 'PGRST303' || /JWT expired|invalid JWT/i.test(msg)) return new ApiError('Sua sessão expirou. Entre de novo.', 401, code)
+  if (code === '23505') return new ApiError(own ?? 'Já existe um item com esse nome.', 409, code)
+  if (code === '42501' || /row-level security|permission denied/i.test(msg)) {
+    if (own === 'Não autenticado.') return new ApiError('Sua sessão expirou. Entre de novo.', 401, code)
+    return new ApiError(own ?? 'Você não tem acesso a isso. Entre de novo.', 403, code)
+  }
+  if (code === 'P0002' || code === 'PGRST116') return new ApiError(own ?? 'Não encontramos esse item.', 404, code)
+  if (code === '23503') return new ApiError(own ?? 'Esse item está ligado a outro e não pode ser alterado assim.', 422, code)
+  if (code === '23514' || code === '22023' || code === '22P02' || code === 'P0001') return new ApiError(own ?? 'Confira os dados e tente de novo.', 422, code)
   return new ApiError('Não deu para salvar. Tente de novo.', 500, code)
 }
 

@@ -1,6 +1,7 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import { isRecoverySession, markRecoveryPending, onPasswordRecovery, onSessionChange, restoreSupabaseSession } from './services/auth'
-import { USE_SUPABASE } from './services/http'
+import { errorMessage, OFFLINE_MESSAGE, USE_SUPABASE } from './services/http'
+import { WifiOff } from 'lucide-react'
 import DemoBanner from './components/DemoBanner'
 import { Splash } from './components/Splash'
 import TabBar, { SideRail } from './components/TabBar'
@@ -46,6 +47,8 @@ function Screen({ onReady }: { onReady: () => void }) {
   // Supabase: confere a sessão salva (ou o link de confirmação) antes de mostrar o login
   const [booting, setBooting] = useState(USE_SUPABASE)
   const [recovery, setRecovery] = useState(false)
+  // Não deu para abrir a conta (sem internet, servidor fora): mostra o aviso em vez do login
+  const [bootError, setBootError] = useState<string | null>(null)
 
   useEffect(() => {
     if (!USE_SUPABASE) return
@@ -70,6 +73,7 @@ function Screen({ onReady }: { onReady: () => void }) {
         else if (FROM_CONFIRMATION_LINK) notify('E-mail confirmado. Bem-vindo ao Okiva!')
         if (CONFIRM_ACTION || EMAIL_CHANGE_HALF) window.history.replaceState(window.history.state, '', window.location.pathname)
       })
+      .catch((err) => alive && setBootError(errorMessage(err, OFFLINE_MESSAGE)))
       .finally(() => alive && setBooting(false))
     // Sessão desta aba acabou (ou virou outra pessoa) fora do app: login, ou recarrega a conta certa
     const stop = onSessionChange((change) => (change === 'out' ? dispatch({ type: 'logout' }) : window.location.reload()))
@@ -134,6 +138,24 @@ function Screen({ onReady }: { onReady: () => void }) {
   }, [signedIn, dispatch])
 
   if (booting) return <ScreenSkeleton />
+
+  if (bootError && !signedIn)
+    return (
+      <div className="grid min-h-dvh place-items-center bg-esk-bg px-8 text-center">
+        <div className="flex max-w-[360px] flex-col items-center gap-4">
+          <WifiOff size={32} className="text-esk-muted" aria-hidden />
+          <p className="font-sat text-[20px] font-medium text-white">Não deu para abrir sua conta</p>
+          <p className="font-sat text-[14px] leading-[1.45] text-esk-muted">{bootError} Sua sessão continua salva.</p>
+          <button
+            type="button"
+            onClick={() => window.location.reload()}
+            className="mt-2 h-[48px] rounded-[24px] bg-esk-lime px-6 font-sat text-[15px] font-medium text-esk-ink transition active:scale-95"
+          >
+            Tentar de novo
+          </button>
+        </div>
+      </div>
+    )
 
   // Link de recuperação: só cria a senha nova; a conta não abre por essa sessão
   if (recovery)

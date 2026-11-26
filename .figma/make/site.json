@@ -1,4 +1,6 @@
 {
+  "title": "Okiva",
+  "language": "pt-BR",
   "description": "Gerencie gastos, cartões e metas financeiras em um só lugar, com registro manual e insights de IA para entender faturas e planejar conquistas.",
   "robots": {
     "index": false

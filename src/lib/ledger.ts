@@ -11,7 +11,7 @@
  *    continuam tirando do saldo e fora dos gastos do mês.
  */
 import type { Account, AppState, Card, CategoryId, IncomeSource, Recurrence, Transaction, TxKind } from '../types'
-import { toISO, uid } from './format'
+import { toISO, uid, byDateDesc } from './format'
 
 export const kindOf = (t: Pick<Transaction, 'kind'>): TxKind => t.kind ?? 'expense'
 export const isExpense = (t: Pick<Transaction, 'kind'>) => kindOf(t) === 'expense'
@@ -314,7 +314,7 @@ export function processDueLocal(input: AppState, today: string): AppState {
     return { ...r, lastRun: r.endDate && r.endDate < today ? r.endDate : today }
   })
   if (!changed) return state
-  state = { ...state, cards, recurrences, transactions: [...created, ...transactions].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0)) }
+  state = { ...state, cards, recurrences, transactions: [...created, ...transactions].sort(byDateDesc) }
   return state
 }
 

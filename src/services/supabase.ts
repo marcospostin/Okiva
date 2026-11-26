@@ -66,6 +66,24 @@ export function setRemember(remember: boolean) {
   safe(() => localStorage.removeItem(REMEMBER_KEY), undefined)
 }
 
+/** Tempo máximo de cada chamada: sem isso, numa rede ruim a tela de carregamento podia não acabar. */
+const TIMEOUT_MS = 20_000
+/** Envio de foto (Storage) pode demorar mais numa conexão lenta. */
+const UPLOAD_TIMEOUT_MS = 60_000
+
+const fetchWithTimeout: typeof fetch = (input, init) => {
+  const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
+  const ms = url.includes('/storage/v1/') ? UPLOAD_TIMEOUT_MS : TIMEOUT_MS
+  const ctrl = new AbortController()
+  const timer = setTimeout(() => ctrl.abort(new DOMException('Tempo esgotado', 'TimeoutError')), ms)
+  // Respeita também o cancelamento de quem chamou
+  if (init?.signal) {
+    if (init.signal.aborted) ctrl.abort(init.signal.reason)
+    else init.signal.addEventListener('abort', () => ctrl.abort(init.signal!.reason), { once: true })
+  }
+  return fetch(input, { ...init, signal: ctrl.signal }).finally(() => clearTimeout(timer))
+}
+
 let client: SupabaseClient<Database> | null = null
 
 /** Cliente tipado. Use só quando USE_SUPABASE for true. */
@@ -73,6 +91,7 @@ export function sb(): SupabaseClient<Database> {
   if (!USE_SUPABASE) throw new Error('Supabase não configurado (VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY).')
   client ??= createClient<Database>(import.meta.env.VITE_SUPABASE_URL!, import.meta.env.VITE_SUPABASE_ANON_KEY!, {
     auth: { storage: authStorage, persistSession: true, autoRefreshToken: true, detectSessionInUrl: true },
+    global: { fetch: fetchWithTimeout },
   })
   return client
 }

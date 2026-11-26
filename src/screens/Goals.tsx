@@ -46,7 +46,7 @@ export default function Goals() {
         <div className="grid gap-x-12 wide:grid-cols-2 md:pt-4 lg:gap-x-16">
           {/* This month: budget */}
           <section aria-label="Este mês" className="flex flex-col gap-[18px] pt-6">
-            <SectionHeader title="Este mês" action={<span className="font-sat text-[13px] text-esk-subtle">Faltam {daysLeftInMonth()} dias</span>} />
+            <SectionHeader title="Este mês" action={<span className="font-sat text-[13px] text-esk-subtle">{daysLeftInMonth() === 0 ? 'Último dia do mês' : daysLeftInMonth() === 1 ? 'Falta 1 dia' : `Faltam ${daysLeftInMonth()} dias`}</span>} />
             <div className="flex flex-col gap-3">
             <button
               type="button"
