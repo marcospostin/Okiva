@@ -43,10 +43,10 @@ export default function Login({ recovery, onRecoveryDone, notice }: { recovery?:
           <p className="font-logo text-[54px] leading-none font-bold tracking-[-1.7px] 3xl:text-[66px]">Okiva</p>
           <div>
             <p className="max-w-[460px] font-sat text-[44px] leading-[1.05] font-medium tracking-[-1.8px] 3xl:text-[56px]">
-              Registre gastos, acompanhe cartões e guarde para o que importa.
+              Veja com clareza suas contas e cartões e leve seu dinheiro mais longe.
             </p>
             <p className="max-w-[420px] pt-6 font-sat text-[22px] leading-[1.25] font-medium tracking-[-0.5px]">
-              Seu assistente financeiro para gastos e conquistas.
+              Acompanhe saldos, faturas, parcelas e metas em um só lugar.
             </p>
           </div>
         </div>

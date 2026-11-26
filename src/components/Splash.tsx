@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 
 const SEEN_KEY = 'okiva:splash-seen'
 /** Tempo mínimo na tela (a marca precisa ser lida, não piscar) */
-const MIN_MS = 2400
+const MIN_MS = 3000
 const FADE_MS = 360
 
 /** Celular (o painel do login fica escondido abaixo de md) e ainda não visto nesta visita. */
@@ -49,7 +49,7 @@ export function Splash({ ready }: { ready: boolean }) {
   return (
     <div
       role="img"
-      aria-label="Okiva. Registre gastos, acompanhe cartões e guarde para o que importa."
+      aria-label="Okiva. Veja com clareza suas contas e cartões e leve seu dinheiro mais longe."
       className="fixed inset-0 z-[100] bg-esk-bg p-4 transition-opacity ease-out md:hidden"
       style={{ opacity: leaving ? 0 : 1, transitionDuration: `${FADE_MS}ms` }}
     >
@@ -59,11 +59,11 @@ export function Splash({ ready }: { ready: boolean }) {
       >
         <p className="animate-rise font-logo text-[44px] leading-none font-bold tracking-[-1.4px]">Okiva</p>
         <div>
-          <p className="animate-rise font-sat text-[36px] leading-[1.06] font-medium tracking-[-1.4px]" style={{ animationDelay: '120ms' }}>
-            Registre gastos, acompanhe cartões e guarde para o que importa.
+          <p className="animate-rise text-balance font-sat text-[32px] leading-[1.08] font-medium tracking-[-1.2px]" style={{ animationDelay: '120ms' }}>
+            Veja com clareza suas contas e cartões e leve seu dinheiro mais longe.
           </p>
           <p className="animate-rise pt-5 font-sat text-[18px] leading-[1.3] font-medium tracking-[-0.3px]" style={{ animationDelay: '220ms' }}>
-            Seu assistente financeiro para gastos e conquistas.
+            Acompanhe saldos, faturas, parcelas e metas em um só lugar.
           </p>
         </div>
       </div>

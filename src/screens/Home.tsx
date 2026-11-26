@@ -817,7 +817,7 @@ export default function Home() {
       </Page>
       <footer className="mt-auto px-[32px] pb-6 text-center md:px-10 md:pb-8 lg:px-14 3xl:px-16">
         <p className="font-inter text-[10px] leading-[1.4] text-esk-muted">
-          Seu assistente financeiro para gastos e conquistas.
+          Seu assistente para acompanhar contas, cartões e metas.
         </p>
       </footer>
     </div>
