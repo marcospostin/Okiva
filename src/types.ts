@@ -82,6 +82,8 @@ export interface InvoiceImport {
   importedAt: string
   /** Card invoice before the import, restored when the import is undone */
   previousInvoice: number | null
+  /** Extrato importado nesta conta (receitas, gastos e pagamentos de fatura). Nunca junto com cardId. */
+  accountId?: string | null
 }
 
 /** Money put into a goal. Goal.saved and Goal.deposited are kept in sync with these. */

@@ -4,8 +4,9 @@
 import { useState } from 'react'
 import { categoryMeta } from '../../data/categories'
 import { cx, Field, inputClass, MoneyInput, PrimaryButton, Sheet } from '../../components/ui'
-import { brl, brlShort, longDate, privateExpense, privateMoney } from '../../lib/format'
-import { cardLabel, cardName, cardNickname, cardShort, useStore } from '../../state/store'
+import { brl, brlShort, longDate, privateExpense, privateIncome, privateMoney } from '../../lib/format'
+import { accountLabel, cardLabel, cardName, cardNickname, cardShort, useStore } from '../../state/store'
+import { incomeLabel, kindOf } from '../../lib/ledger'
 import { BankSuggestions } from '../../components/BankSuggestions'
 import { BANK_LIST_ID } from '../../data/banks'
 import { cardsApi, invoicesApi } from '../../services/finance'
@@ -159,19 +160,21 @@ export function InvoiceImportSheet({ close, id }: { close: () => void; id: strin
   if (!inv) return null
   const txs = state.transactions.filter((t) => t.invoiceId === inv.id)
   const card = inv.cardId ? state.cards.find((c) => c.id === inv.cardId) : undefined
-  const sum = txs.reduce((s, t) => s + t.amount, 0)
+  const statement = !!inv.accountId
+  const signedAmount = (t: (typeof txs)[number]) => (kindOf(t) === 'income' ? t.amount : -t.amount)
+  const sum = statement ? txs.reduce((s, t) => s + signedAmount(t), 0) : txs.reduce((s, t) => s + t.amount, 0)
   const shown = all ? txs : txs.slice(0, 5)
   const restores = card && inv.previousInvoice !== null
   return (
-    <Sheet title="Fatura importada" onClose={close}>
+    <Sheet title={statement ? 'Extrato importado' : 'Fatura importada'} onClose={close}>
       <div className="flex flex-col gap-5">
         <DetailRows
           rows={[
             ['Arquivo', inv.fileName],
-            ['Cartão', card ? cardLabel(card) : 'Sem cartão (Dinheiro)'],
-            ['Importada em', longDate(inv.importedAt)],
-            ['Total da fatura', privateMoney(brl(inv.total), hidden)],
-            ['Lançamentos', `${txs.length} · ${privateMoney(brl(sum), hidden)}`],
+            statement ? ['Conta', accountLabel(state, inv.accountId!)] : ['Cartão', card ? cardLabel(card) : 'Sem cartão (Dinheiro)'],
+            [statement ? 'Importado em' : 'Importada em', longDate(inv.importedAt)],
+            ...(statement ? [] : [['Total da fatura', privateMoney(brl(inv.total), hidden)] as [string, string]]),
+            ['Lançamentos', `${txs.length} · ${statement ? (sum < 0 ? '− ' : '+ ') : ''}${privateMoney(brl(Math.abs(sum)), hidden)}`],
           ]}
         />
         {txs.length > 0 && (
@@ -187,9 +190,15 @@ export function InvoiceImportSheet({ close, id }: { close: () => void; id: strin
                 >
                   <span className="flex min-w-0 flex-col">
                     <span className="truncate font-sat text-[15px] font-medium text-white">{t.name}</span>
-                    <span className="font-sat text-[12px] text-esk-subtle">{categoryMeta(state, t.category).label} · {longDate(t.date)}</span>
+                    <span className="font-sat text-[12px] text-esk-subtle">
+                      {kindOf(t) === 'income' ? incomeLabel(t.category) : kindOf(t) === 'invoice_payment' ? 'Pagamento de fatura' : categoryMeta(state, t.category).label} · {longDate(t.date)}
+                    </span>
                   </span>
-                  <span className="font-sat text-[15px] font-medium whitespace-nowrap text-esk-negative">{privateExpense(t.amount, hidden)}</span>
+                  {kindOf(t) === 'income' ? (
+                    <span className="font-sat text-[15px] font-medium whitespace-nowrap text-esk-lime">{privateIncome(t.amount, hidden)}</span>
+                  ) : (
+                    <span className="font-sat text-[15px] font-medium whitespace-nowrap text-esk-negative">{privateExpense(t.amount, hidden)}</span>
+                  )}
                 </button>
               ))}
             </div>
@@ -205,7 +214,7 @@ export function InvoiceImportSheet({ close, id }: { close: () => void; id: strin
           onOpen={() => setConfirm(true)}
           onCancel={() => setConfirm(false)}
           label="Desfazer importação"
-          question={`Apagar ${plural(txs.length, 'lançamento', 'lançamentos')} desta fatura?${restores ? ` A fatura do ${cardShort(card!)} volta para ${privateMoney(brl(inv.previousInvoice!), hidden)}.` : ''}`}
+          question={`Apagar ${plural(txs.length, 'lançamento', 'lançamentos')} ${statement ? 'deste extrato' : 'desta fatura'}?${restores ? ` A fatura do ${cardShort(card!)} volta para ${privateMoney(brl(inv.previousInvoice!), hidden)}.` : ''}`}
           loading={pending === 'delete'}
           onConfirm={async () => {
             if (await run('delete', () => invoicesApi.remove(inv.id), () => dispatch({ type: 'undoInvoice', id: inv.id }), 'Importação desfeita', 'Não deu para desfazer. Tente de novo.')) close()

@@ -1,4 +1,4 @@
--- Okiva · teste das regras do banco (saldo, cartão removido, crédito, adiantar, apagar dados).
+-- Okiva · teste das regras do banco (saldo, cartão removido, crédito, adiantar, extrato, apagar dados).
 --
 -- Como rodar: cole no SQL Editor do Supabase e execute. Cria uma conta de demonstração temporária,
 -- confere as regras e TERMINA COM ERRO DE PROPÓSITO para desfazer tudo (nada fica gravado):
@@ -56,7 +56,20 @@ begin
     assert (select invoice from public.cards where id = cid) = inv + sum_before - 10, 'adiantar parcelas: fatura não subiu o valor certo';
   end if;
 
-  -- 4. Remover cartão: saldo e total de gastos não mudam; pagamentos continuam pagamentos
+  -- 4. Extrato de conta: receita + gasto + pagamento de fatura; desfazer volta tudo
+  select * into c from public.cards where user_id = u order by position limit 1;
+  b := public.balance_of(u);
+  perform public.import_invoice(null, 'teste-extrato.ofx', 400, jsonb_build_array(
+    jsonb_build_object('kind', 'income', 'name', 'Salário', 'category', 'receita_salario', 'amount', 5000),
+    jsonb_build_object('kind', 'expense', 'name', 'Mercado', 'amount', 100),
+    jsonb_build_object('kind', 'invoice_payment', 'name', 'Pagamento fatura', 'cardId', c.id, 'amount', 300)), null, acc);
+  assert public.balance_of(u) = b + 4600, format('extrato: saldo %s (esperado %s)', public.balance_of(u), b + 4600);
+  assert (select invoice from public.cards where id = c.id) = c.invoice - 300, 'extrato: pagamento não abateu a fatura';
+  delete from public.invoice_imports where user_id = u and file_name = 'teste-extrato.ofx';
+  assert public.balance_of(u) = b, 'desfazer extrato: saldo não voltou';
+  assert (select invoice from public.cards where id = c.id) = c.invoice, 'desfazer extrato: fatura não voltou';
+
+  -- 5. Remover cartão: saldo e total de gastos não mudam; pagamentos continuam pagamentos
   b := public.balance_of(u);
   select coalesce(sum(amount), 0) into sum_before from public.transactions where user_id = u and kind = 'expense';
   select * into c from public.cards where user_id = u order by position limit 1;
@@ -65,7 +78,7 @@ begin
   assert (select coalesce(sum(amount), 0) from public.transactions where user_id = u and kind = 'expense') = sum_before, 'remover cartão mudou o total de gastos';
   assert not exists (select 1 from public.transactions where user_id = u and removed_card is not null and kind = 'expense' and method_type = 'card'), 'compra de cartão removido ainda aponta para cartão';
 
-  -- 5. Começar do zero: apaga tudo, inclusive subcontas e mais de uma conta principal
+  -- 6. Começar do zero: apaga tudo, inclusive subcontas e mais de uma conta principal
   perform public.clear_my_data();
   select count(*) into n from public.accounts where user_id = u;
   assert n = 0, format('clear_my_data deixou %s contas', n);

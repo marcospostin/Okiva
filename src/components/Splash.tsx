@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Isotype } from './Isotype'
 
 const SEEN_KEY = 'okiva:splash-seen'
 /** Tempo mínimo na tela (a marca precisa ser lida, não piscar) */
@@ -57,7 +58,10 @@ export function Splash({ ready }: { ready: boolean }) {
         className="flex h-full flex-col justify-between rounded-[34px] px-7 pt-9 pb-10 text-esk-ink"
         style={{ backgroundImage: 'var(--esk-gradient-hero)', paddingTop: 'max(36px, env(safe-area-inset-top))', paddingBottom: 'max(40px, env(safe-area-inset-bottom))' }}
       >
-        <p className="animate-rise font-logo text-[44px] leading-none font-bold tracking-[-1.4px]">Okiva</p>
+        <p className="flex animate-rise items-center gap-[0.22em] font-logo text-[44px] leading-none font-bold tracking-[-1.4px]">
+          <Isotype />
+          Okiva
+        </p>
         <div>
           <p className="animate-rise text-balance font-sat text-[32px] leading-[1.08] font-medium tracking-[-1.2px]" style={{ animationDelay: '120ms' }}>
             Veja com clareza suas contas e cartões e leve seu dinheiro mais longe.

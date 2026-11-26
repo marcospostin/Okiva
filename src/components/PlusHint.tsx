@@ -109,6 +109,6 @@ export function LockBadge({ className }: { className?: string }) {
 }
 
 export const PLUS_PITCH = {
-  invoice: 'Envie o PDF ou a foto da fatura e a IA lança todas as compras para você.',
+  invoice: 'Envie a fatura do cartão ou o extrato da conta (OFX, PDF ou foto) e a IA lança tudo para você.',
   assistant: 'Pergunte sobre seus gastos e metas e receba respostas com os seus números.',
 }

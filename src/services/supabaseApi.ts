@@ -202,6 +202,7 @@ export const toInvoice = (r: Row<'invoice_imports'>): InvoiceImport => ({
   total: num(r.total),
   importedAt: r.imported_at,
   previousInvoice: r.previous_invoice === null ? null : num(r.previous_invoice),
+  accountId: r.account_id ?? null,
 })
 
 const toCategory = (r: Row<'categories'>): CustomCategory => ({ id: r.key ?? r.id, rowId: r.id, label: r.label, color: r.color })
@@ -370,12 +371,14 @@ interface ImportRpcResult {
   invoice: Row<'invoice_imports'>
   transactions: Row<'transactions'>[]
   card: Row<'cards'> | null
+  cards?: Row<'cards'>[]
   duplicate: boolean
 }
 
 export const sbInvoicesApi = {
   import: async (input: ImportInvoiceInput): Promise<ImportInvoiceResult> => {
     const items = input.items.map((t) => ({
+      kind: t.kind ?? 'expense',
       name: t.name,
       category: t.category,
       amount: t.amount,
@@ -386,6 +389,7 @@ export const sbInvoicesApi = {
     const r = (await run(
       sb().rpc('import_invoice', {
         p_card_id: input.cardId as string,
+        ...(input.accountId ? { p_account_id: input.accountId } : {}),
         p_file_name: input.fileName,
         p_total: input.total,
         p_items: items,
@@ -395,8 +399,8 @@ export const sbInvoicesApi = {
       }),
     )) as unknown as ImportRpcResult
     // Idempotência: a mesma fatura (cartão + arquivo + total) não entra duas vezes
-    if (r.duplicate) throw new ApiError('Essa fatura já foi importada. Veja em Cartões → Faturas importadas.', 409)
-    return { invoice: toInvoice(r.invoice), transactions: r.transactions.map(toTx), card: r.card ? toCard(r.card) : null }
+    if (r.duplicate) throw new ApiError('Esse arquivo já foi importado. Veja em Cartões → Arquivos importados.', 409)
+    return { invoice: toInvoice(r.invoice), transactions: r.transactions.map(toTx), card: r.card ? toCard(r.card) : null, cards: (r.cards ?? []).map(toCard) }
   },
   list: async () => {
     const me = await uid()

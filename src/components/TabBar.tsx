@@ -34,7 +34,7 @@ const TABS: Tab[] = [
   { view: 'home', label: 'Início', icon: (n) => <House size={n} strokeWidth={1.6} aria-hidden /> },
   {
     view: 'invoice',
-    label: 'Fatura',
+    label: 'Importar',
     icon: (n) => <TintIcon name="c2640.svg" size={n} />,
     plus: true,
     pitch: PLUS_PITCH.invoice,
@@ -54,16 +54,31 @@ const TABS: Tab[] = [
 /** Barra lateral (tablet/computador): o Assistente vai para o topo, o resto segue a ordem do celular. */
 const RAIL_TABS: Tab[] = [...TABS.filter((t) => t.primary), ...TABS.filter((t) => !t.primary)]
 
-
-export default function TabBar() {
+/**
+ * Lógica comum às duas barras: qual tela está aberta, se o Plus está ativo,
+ * o aviso "Disponível no Okiva Plus" e o que acontece ao tocar em cada item.
+ */
+function useTabNav() {
   const { state } = useStore()
   const { view, switchTab } = useUI()
   const plus = state.stage === 2
   const [hint, setHint] = useState<Tab | null>(null)
-  const barRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
     if (plus) setHint(null)
   }, [plus])
+  const isLocked = (tab: Tab) => !!tab.plus && !plus
+  const press = (tab: Tab) => {
+    if (isLocked(tab)) return setHint((h) => (h?.view === tab.view ? null : tab))
+    setHint(null)
+    switchTab(tab.view)
+  }
+  const ariaLabel = (tab: Tab) => (isLocked(tab) ? `${tab.label} (exclusivo do Plus)` : tab.label)
+  return { view, hint, closeHint: () => setHint(null), isLocked, press, ariaLabel }
+}
+
+export default function TabBar() {
+  const { view, hint, closeHint, isLocked, press, ariaLabel } = useTabNav()
+  const barRef = useRef<HTMLDivElement>(null)
 
   const hintIndex = hint ? TABS.indexOf(hint) : -1
 
@@ -79,7 +94,7 @@ export default function TabBar() {
             label={hint.label}
             pitch={hint.pitch ?? ''}
             view={hint.view}
-            onClose={() => setHint(null)}
+            onClose={closeHint}
             within={barRef}
             arrowLeft={`${((hintIndex + 0.5) / TABS.length) * 100}%`}
           />
@@ -87,20 +102,16 @@ export default function TabBar() {
 
         <nav aria-label="Menu principal" className="flex h-[76px] items-center gap-2 rounded-[16px] bg-esk-row p-2">
           {TABS.map((tab) => {
-            const locked = !!tab.plus && !plus
+            const locked = isLocked(tab)
             const active = view === tab.view
-            const onClick = () => {
-              if (locked) return setHint((h) => (h?.view === tab.view ? null : tab))
-              setHint(null)
-              switchTab(tab.view)
-            }
+            const onClick = () => press(tab)
             if (tab.primary) {
               return (
                 <div key={tab.view} className="flex h-[60px] flex-1 items-center justify-center">
                   <button
                     type="button"
                     onClick={onClick}
-                    aria-label={locked ? `${tab.label} (exclusivo do Plus)` : tab.label}
+                    aria-label={ariaLabel(tab)}
                     aria-disabled={locked || undefined}
                     aria-current={active ? 'page' : undefined}
                     className={cx(
@@ -121,7 +132,7 @@ export default function TabBar() {
                 key={tab.view}
                 type="button"
                 onClick={onClick}
-                aria-label={locked ? `${tab.label} (exclusivo do Plus)` : tab.label}
+                aria-label={ariaLabel(tab)}
                 aria-disabled={locked || undefined}
                 aria-current={active ? 'page' : undefined}
                 className={cx(
@@ -156,14 +167,8 @@ const RAIL_ICON = 22
  * inferior em círculos, com o Assistente primeiro. O nome aparece ao passar o mouse.
  */
 export function SideRail() {
-  const { state } = useStore()
-  const { view, switchTab } = useUI()
-  const plus = state.stage === 2
-  const [hint, setHint] = useState<Tab | null>(null)
+  const { view, hint, closeHint, isLocked, press, ariaLabel } = useTabNav()
   const railRef = useRef<HTMLElement>(null)
-  useEffect(() => {
-    if (plus) setHint(null)
-  }, [plus])
 
   return (
     <aside
@@ -180,19 +185,15 @@ export function SideRail() {
 
       <nav aria-label="Menu principal" className="mt-6 flex flex-col items-center gap-[var(--rail-gap)]">
         {RAIL_TABS.map((tab) => {
-          const locked = !!tab.plus && !plus
+          const locked = isLocked(tab)
           const active = view === tab.view
-          const onClick = () => {
-            if (locked) return setHint((h) => (h?.view === tab.view ? null : tab))
-            setHint(null)
-            switchTab(tab.view)
-          }
+          const onClick = () => press(tab)
           return (
             <div key={tab.view} className="group relative">
               <button
                 type="button"
                 onClick={onClick}
-                aria-label={locked ? `${tab.label} (exclusivo do Plus)` : tab.label}
+                aria-label={ariaLabel(tab)}
                 aria-disabled={locked || undefined}
                 aria-current={active ? 'page' : undefined}
                 className={cx(
@@ -226,7 +227,7 @@ export function SideRail() {
                   label={tab.label}
                   pitch={tab.pitch ?? ''}
                   view={tab.view}
-                  onClose={() => setHint(null)}
+                  onClose={closeHint}
                   within={railRef}
                   arrow="left"
                   arrowLeft="0"

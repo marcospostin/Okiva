@@ -5,6 +5,7 @@ import { savePrefs } from '../services/supabaseApi'
 import { DEMO_USER, initialState, today } from '../data/mock'
 import { restoreSession, sessionEmail, signOut } from '../services/auth'
 import { monthKey, toISO, shiftMonth, byDateDesc } from '../lib/format'
+import { cardLabel } from '../lib/labels'
 import { accountEffect, adjustInvoice, balanceEffect, ensureAccounts, isExpense, kindOf, processDueLocal, round2 } from '../lib/ledger'
 import type { Account, AppState, Budget, CapAlert, Card, CategoryId, CategoryRule, CustomCategory, Goal, GoalDeposit, InvoiceImport, NotificationPrefs, Recurrence, Stage, Transaction, User } from '../types'
 
@@ -27,7 +28,7 @@ type Action =
   | { type: 'addTx'; tx: Transaction }
   | { type: 'updateTx'; tx: Transaction }
   | { type: 'deleteTx'; id: string }
-  | { type: 'importInvoice'; txs: Transaction[]; card: Card | null; invoice: InvoiceImport }
+  | { type: 'importInvoice'; txs: Transaction[]; card: Card | null; invoice: InvoiceImport; cards?: Card[] }
   /** Removes an imported invoice and every expense that came from it */
   | { type: 'undoInvoice'; id: string }
   | { type: 'setName'; name: string }
@@ -197,20 +198,27 @@ function reducer(state: AppState, action: Action): AppState {
         ...state,
         transactions: [...action.txs, ...state.transactions],
         // The invoice read by the AI replaces the typed invoice value
-        cards: card ? state.cards.map((c) => (c.id === card.id ? card : c)) : state.cards,
+        cards: state.cards.map((c) => (card && c.id === card.id ? card : (action.cards?.find((x) => x.id === c.id) ?? c))),
         invoices: [action.invoice, ...state.invoices],
       }
     }
     case 'undoInvoice': {
       const inv = state.invoices.find((i) => i.id === action.id)
       if (!inv) return state
+      // Pagamentos de fatura que vieram de um extrato voltam para a fatura do cartão
+      const paidBack = new Map<string, number>()
+      for (const t of state.transactions) {
+        if (t.invoiceId === inv.id && kindOf(t) === 'invoice_payment' && t.method.type === 'card') paidBack.set(t.method.cardId, (paidBack.get(t.method.cardId) ?? 0) + t.amount)
+      }
       return {
         ...state,
         transactions: state.transactions.filter((t) => t.invoiceId !== inv.id),
         // Desfaz só o que a importação mudou (total − fatura de antes), sem apagar o que entrou depois
-        cards: state.cards.map((c) =>
-          c.id === inv.cardId && inv.previousInvoice !== null ? { ...c, invoice: round2(c.invoice - (inv.total - inv.previousInvoice)) } : c,
-        ),
+        cards: state.cards
+          .map((c) => (paidBack.has(c.id) ? { ...c, invoice: round2(c.invoice + paidBack.get(c.id)!) } : c))
+          .map((c) =>
+            c.id === inv.cardId && inv.previousInvoice !== null ? { ...c, invoice: round2(c.invoice - (inv.total - inv.previousInvoice)) } : c,
+          ),
         invoices: state.invoices.filter((i) => i.id !== inv.id),
       }
     }
@@ -508,28 +516,6 @@ export function accountTransactions(state: AppState, accountId: string) {
     .sort(byDateDesc)
 }
 
-export function accountName(state: AppState, id?: string) {
-  return state.accounts.find((a) => a.id === id)?.name ?? state.accounts[0]?.name ?? 'Conta'
-}
-
-/** "Nubank · Dia a dia" (conta com apelido), "Nubank · Caixinha 01" (subconta) ou só o banco. */
-export function accountLabel(state: AppState, id?: string) {
-  const a = state.accounts.find((x) => x.id === id)
-  if (!a) return accountName(state, id)
-  const parent = a.parentId ? state.accounts.find((x) => x.id === a.parentId) : undefined
-  if (parent) return `${parent.name} · ${a.name}`
-  return a.nickname ? `${a.name} · ${a.nickname}` : a.name
-}
-
-/** Banco do cartão (cartões antigos sem banco: o apelido). */
-export const cardName = (c: Pick<Card, 'bank' | 'nickname'>) => c.bank?.trim() || c.nickname
-/** Apelido, quando é diferente do banco. */
-export const cardNickname = (c: Pick<Card, 'bank' | 'nickname'>) => (c.bank && c.nickname && c.nickname !== c.bank ? c.nickname : undefined)
-/** "Nubank · Viagens" (para escolher entre cartões do mesmo banco). */
-export const cardShort = (c: Pick<Card, 'bank' | 'nickname'>) => (cardNickname(c) ? `${cardName(c)} · ${cardNickname(c)}` : cardName(c))
-/** "Nubank · Viagens •• 4552" */
-export const cardLabel = (c: Pick<Card, 'bank' | 'nickname' | 'last4'>) => `${cardShort(c)} •• ${c.last4}`
-
 export interface MonthSummary {
   key: string
   /** Só gastos (o que conta no teto) */
@@ -665,14 +651,7 @@ export function goalPace(goal: Goal) {
   return { average, monthsLeft }
 }
 
-export function methodLabel(state: AppState, t: Pick<Transaction, 'method' | 'kind' | 'accountId' | 'removedCard'>) {
-  if (kindOf(t) === 'income') return accountName(state, t.accountId)
-  if (t.removedCard) return `${t.removedCard} (removido)`
-  if (t.method.type === 'pix') return 'Pix'
-  if (t.method.type === 'cash') return 'Dinheiro'
-  const id = t.method.cardId
-  const card = state.cards.find((c) => c.id === id)
-  return card ? cardLabel(card) : 'Cartão'
-}
 
 export type { Budget }
+/** Nomes de conta e cartão moraram aqui antes; continuam disponíveis por este arquivo. */
+export { accountName, accountLabel, cardName, cardNickname, cardShort, cardLabel, methodLabel } from '../lib/labels'

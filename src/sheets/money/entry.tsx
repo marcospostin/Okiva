@@ -458,7 +458,7 @@ export function TransactionSheet({ close, id }: { close: () => void; id: string 
           onClick={() => openSheet({ type: 'invoiceImport', id: invoice.id })}
           className="mt-3 flex w-full items-center justify-between gap-3 rounded-[20px] px-1 py-2 text-left font-sat text-[14px] font-medium text-esk-lime-soft hover:underline"
         >
-          <span className="truncate">Ver fatura {invoice.fileName}</span>
+          <span className="truncate">Ver {invoice.accountId ? 'extrato' : 'fatura'} {invoice.fileName}</span>
           <ChevronRight size={16} aria-hidden />
         </button>
       )}

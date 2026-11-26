@@ -352,6 +352,7 @@ export type Database = {
       }
       invoice_imports: {
         Row: {
+          account_id: string | null
           card_id: string | null
           created_at: string
           file_name: string
@@ -363,6 +364,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          account_id?: string | null
           card_id?: string | null
           created_at?: string
           file_name: string
@@ -374,6 +376,7 @@ export type Database = {
           user_id?: string
         }
         Update: {
+          account_id?: string | null
           card_id?: string | null
           created_at?: string
           file_name?: string
@@ -709,6 +712,7 @@ export type Database = {
       ensure_default_account: { Args: { p_user: string }; Returns: string }
       import_invoice: {
         Args: {
+          p_account_id?: string
           p_card_id: string
           p_file_name: string
           p_items: Json

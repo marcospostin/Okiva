@@ -4,7 +4,7 @@ import { EmptyState, LinkButton, ListPanel, ListRow, Page, PrimaryButton, Progre
 import { brl, brlShort, longDate, pct, privateMoney } from '../lib/format'
 import { invoiceCredit, invoiceDue } from '../lib/ledger'
 import { cardsApi } from '../services/finance'
-import { cardShort, daysUntilDue, todayISO, useStore } from '../state/store'
+import { accountLabel, cardShort, daysUntilDue, todayISO, useStore } from '../state/store'
 import { useUI } from '../state/ui'
 import type { Card } from '../types'
 
@@ -169,12 +169,15 @@ export default function Cards() {
 
         {/* History of invoices read by the AI: open one to see its expenses or undo the import */}
         {state.invoices.length > 0 && (
-          <section aria-label="Faturas importadas" className="flex flex-col gap-3 pt-10 wide:max-w-[calc(50%-24px)] md:pt-12">
-            <h3 className="font-sat text-[17px] font-medium text-esk-muted">Faturas importadas</h3>
+          <section aria-label="Arquivos importados" className="flex flex-col gap-3 pt-10 wide:max-w-[calc(50%-24px)] md:pt-12">
+            <h3 className="font-sat text-[17px] font-medium text-esk-muted">Arquivos importados</h3>
             <ListPanel>
               {state.invoices.map((inv, i) => {
                 const card = inv.cardId ? state.cards.find((c) => c.id === inv.cardId) : undefined
-                const count = state.transactions.filter((t) => t.invoiceId === inv.id).length
+                const txs = state.transactions.filter((t) => t.invoiceId === inv.id)
+                const count = txs.length
+                // Extrato: entradas − saídas; fatura: o total lido
+                const net = inv.accountId ? txs.reduce((s, t) => s + (t.kind === 'income' ? t.amount : -t.amount), 0) : inv.total
                 return (
                   <ListRow
                     key={inv.id}
@@ -182,8 +185,8 @@ export default function Cards() {
                     onClick={() => openSheet({ type: 'invoiceImport', id: inv.id })}
                     icon={<FileText size={19} strokeWidth={1.6} className="text-esk-text-2" aria-hidden />}
                     title={inv.fileName}
-                    subtitle={`${card ? cardShort(card) : 'Sem cartão'} · ${longDate(inv.importedAt)} · ${count} ${count === 1 ? 'lançamento' : 'lançamentos'}`}
-                    value={privateMoney(brlShort(inv.total), hidden)}
+                    subtitle={`${card ? cardShort(card) : inv.accountId ? accountLabel(state, inv.accountId) : 'Sem cartão'} · ${longDate(inv.importedAt)} · ${count} ${count === 1 ? 'lançamento' : 'lançamentos'}`}
+                    value={inv.accountId ? `${net < 0 ? '− ' : '+ '}${privateMoney(brlShort(Math.abs(net)), hidden)}` : privateMoney(brlShort(inv.total), hidden)}
                   />
                 )
               })}

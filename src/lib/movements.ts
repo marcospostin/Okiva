@@ -2,7 +2,7 @@
  * Transferências ("Mover dinheiro") e ajustes ("Conferir saldo/fatura"): como aparecem nas listas.
  * Não são gasto nem receita, então ficam com cor neutra e fora de teto e relatórios.
  */
-import { accountLabel, cardShort } from '../state/store'
+import { accountLabel, cardShort } from './labels'
 import type { AppState, Transaction } from '../types'
 import { brl, HIDDEN_MONEY } from './format'
 import { kindOf } from './ledger'

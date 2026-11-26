@@ -150,7 +150,7 @@ export default function Home() {
     { key: 'add', label: 'Adicionar', icon: <Asset name="0a681.svg" size={23} />, onClick: () => openSheet({ type: 'add' }), primary: true, locked: false },
     {
       key: 'invoice',
-      label: 'Fatura',
+      label: 'Importar',
       icon: <Asset name="c2640.svg" size={23} />,
       onClick: () => (plus ? navigate('invoice') : setPlusHint((v) => !v)),
       primary: false,

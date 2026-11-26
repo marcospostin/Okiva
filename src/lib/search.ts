@@ -12,7 +12,7 @@
  * Tipo:    "receita" · "gasto" · "pagamento" (de fatura)
  */
 import { categoryMeta } from '../data/categories'
-import { accountLabel, methodLabel } from '../state/store'
+import { accountLabel, methodLabel } from './labels'
 import type { AppState, Transaction } from '../types'
 import { incomeLabel, kindOf } from './ledger'
 

@@ -58,7 +58,7 @@ Regra de negócio: gasto no cartão soma na fatura do cartão (editar/apagar des
 
 | Método | Rota | Corpo | Resposta | Tela |
 |--------|------|-------|----------|------|
-| POST | `/api/invoice` | `multipart/form-data` (`file`: PDF ou imagem, até 20 MB) | `InvoiceResult` | Importar fatura → leitura |
+| POST | `/api/invoice` | `multipart/form-data` (`file`: OFX, CSV, PDF ou imagem, até 20 MB; `target`: `card` ou `account`) | `InvoiceResult` | Importar lançamentos → leitura. Com `target=account` (extrato), cada item traz `kind` (`income`, `expense` ou `invoice_payment`) e `statement: true` |
 | POST | `/api/invoices/import` | `ImportInvoiceInput` | `{ invoice, transactions[], card }` | Importar fatura → Confirmar |
 | GET | `/api/invoices` | — | `InvoiceImport[]` | Cartões → Faturas importadas (também vem no snapshot) |
 | DELETE | `/api/invoices/:id` | — | `204` | Fatura importada → Desfazer importação |

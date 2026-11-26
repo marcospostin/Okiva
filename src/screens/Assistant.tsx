@@ -3,10 +3,11 @@ import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import { Asset } from '../components/icons'
 import { cx, RoundButton } from '../components/ui'
 import { askAssistant, replyText, type AssistantReply, type ChatTurn } from '../services/ai'
-import { errorMessage } from '../services/http'
+import { errorMessage, USE_AI_MOCK } from '../services/http'
 import { HIDDEN_MONEY, privateMoneyText } from '../lib/format'
 import { useStore } from '../state/store'
 import { useUI } from '../state/ui'
+import { DemoNotice } from '../components/DemoNotice'
 
 type Message =
   | { id: number; role: 'user'; text: string }
@@ -131,7 +132,7 @@ export default function Assistant() {
               <h1 className="truncate font-sat text-[29px] leading-[1.1] font-medium tracking-[-1.015px] text-white md:text-[36px] md:tracking-[-1.3px]">Assistente</h1>
               <p className="flex items-center gap-[6px] font-sat text-[12px] text-esk-muted" aria-live="polite">
                 <span className={cx('size-[7px] rounded-full transition-colors', waiting ? 'animate-pulse bg-esk-lilac' : 'bg-esk-lime')} />
-                {waiting ? 'Analisando seus números…' : 'Online · responde com seus dados'}
+                {waiting ? 'Analisando seus números…' : USE_AI_MOCK ? 'Em demonstração' : 'Online · responde com seus dados'}
               </p>
             </div>
           </div>
@@ -139,6 +140,10 @@ export default function Assistant() {
             <Asset name="79b35.svg" size={19} />
           </RoundButton>
         </header>
+
+        <DemoNotice className="mt-3">
+          O assistente ainda não usa IA de verdade. As respostas são prontas, montadas com os seus números, e entendem só algumas perguntas.
+        </DemoNotice>
 
         <div className="flex flex-1 flex-col gap-3 pt-4 pb-6" role="log" aria-live="polite" aria-label="Conversa com o assistente">
           {messages.length === 0 && (

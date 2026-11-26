@@ -28,7 +28,12 @@ export interface InvoiceItem {
   subscription: boolean
   /** Compra parcelada ("GELADEIRA PARC 04/10"): parcela desta fatura e total */
   installment?: { number: number; total: number }
+  /** Extrato de conta: entrada (receita), saída (gasto) ou pagamento da fatura do cartão. Ausente = gasto. */
+  kind?: 'expense' | 'income' | 'invoice_payment'
 }
+
+/** Para onde vão os lançamentos lidos: fatura de um cartão ou extrato de uma conta. */
+export type ImportTarget = 'card' | 'account'
 
 /**
  * Reconhece compra parcelada no nome da linha da fatura: "PARC 04/10", "PARCELA 4/10", "4 DE 10"
@@ -57,12 +62,27 @@ export function withInstallments(items: InvoiceItem[]): InvoiceItem[] {
   })
 }
 
+/** Tipo do arquivo enviado. OFX é o preferido: dados exatos do banco, sem ler imagem. */
+export type InvoiceFileKind = 'ofx' | 'csv' | 'pdf' | 'photo'
+
+/** Descobre o tipo pelo nome/MIME (OFX e CSV costumam chegar sem MIME confiável). */
+export function invoiceFileKind(file: Pick<File, 'name' | 'type'>): InvoiceFileKind | null {
+  const ext = file.name.toLowerCase().split('.').pop() ?? ''
+  if (ext === 'ofx' || ext === 'qfx' || /ofx/i.test(file.type)) return 'ofx'
+  if (ext === 'csv' || file.type === 'text/csv') return 'csv'
+  if (ext === 'pdf' || file.type === 'application/pdf') return 'pdf'
+  if (file.type.startsWith('image/') || ['jpg', 'jpeg', 'png', 'heic', 'heif', 'webp'].includes(ext)) return 'photo'
+  return null
+}
+
 export interface InvoiceResult {
   fileName: string
-  kind: 'pdf' | 'photo'
+  kind: InvoiceFileKind
   total: number
   dueInDays: number
   items: InvoiceItem[]
+  /** true = extrato de conta (tem entradas e saídas, sem total nem vencimento de fatura) */
+  statement?: boolean
 }
 
 export type AssistantReply =
@@ -159,8 +179,8 @@ function buildItems(): InvoiceItem[] {
   })
 }
 
-/** Reads a PDF or photo. Mock: simulates upload + OCR progress. */
-export async function readInvoice(file: File, onProgress: (p: number) => void, signal?: AbortSignal): Promise<InvoiceResult> {
+/** Reads an OFX, CSV, PDF or photo. Mock: simulates upload + reading progress. */
+export async function readInvoice(file: File, onProgress: (p: number) => void, signal?: AbortSignal, target: ImportTarget = 'card'): Promise<InvoiceResult> {
   if (!USE_AI_MOCK) {
     // Upload progress is not exposed by fetch; show steady steps while the server reads.
     let p = 15
@@ -173,6 +193,7 @@ export async function readInvoice(file: File, onProgress: (p: number) => void, s
     try {
       const body = new FormData()
       body.append('file', file)
+      body.append('target', target)
       const result = await request<InvoiceResult>('POST', '/api/invoice', body, { signal, timeoutMs: 60000 })
       onProgress(100)
       return result
@@ -185,13 +206,42 @@ export async function readInvoice(file: File, onProgress: (p: number) => void, s
     await sleep(110 + Math.random() * 90, signal)
     onProgress(Math.round((i / steps) * 100))
   }
+  if (target === 'account') {
+    const items = buildStatementItems()
+    return {
+      fileName: file.name,
+      kind: invoiceFileKind(file) ?? 'pdf',
+      total: Math.round(items.filter((i) => i.kind !== 'income').reduce((s, i) => s + i.amount, 0) * 100) / 100,
+      dueInDays: 0,
+      items,
+      statement: true,
+    }
+  }
   return {
     fileName: file.name,
-    kind: file.type.startsWith('image/') ? 'photo' : 'pdf',
+    kind: invoiceFileKind(file) ?? 'pdf',
     total: INVOICE_TOTAL,
     dueInDays: 8,
     items: buildItems(),
   }
+}
+
+// prettier-ignore
+/** Extrato de exemplo: entradas, saídas via Pix/débito e o pagamento da fatura do cartão. */
+const STATEMENT: [string, InvoiceItem['kind'], CategoryId | null, number, number][] = [
+  ['Salário ACME LTDA', 'income', 'receita_salario', 6500, 5], ['Pix recebido Maria S.', 'income', 'receita_outros', 120, 3],
+  ['Rendimento da conta', 'income', 'receita_rendimentos', 12.34, 1], ['Mercado Pão de Açúcar', 'expense', 'alimentacao', 342.18, 2],
+  ['Conta de luz Enel', 'expense', 'moradia', 128.07, 4], ['Uber', 'expense', 'transporte', 23.9, 6],
+  ['Farmácia São Paulo', 'expense', 'saude', 56.4, 7], ['PIX QRS 4471-AB', 'expense', null, 18.5, 8],
+  ['Pagamento de fatura cartão', 'invoice_payment', null, 1752.58, 9],
+]
+
+function buildStatementItems(): InvoiceItem[] {
+  const t = today()
+  return STATEMENT.map(([name, kind, category, amount, daysAgo]) => {
+    const d = new Date(t.getFullYear(), t.getMonth(), Math.max(1, t.getDate() - daysAgo))
+    return { name, kind, category, amount, date: toISO(d), subscription: false }
+  })
 }
 
 /* ---------------------------------------------------------- assistant */
@@ -256,7 +306,7 @@ function mockReply(question: string, state: AppState): AssistantReply {
 
   if (/assinatura|netflix|spotify|streaming/.test(q)) {
     const subs = state.transactions.filter((t) => isExpense(t) && t.category === 'assinaturas' && monthKey(t.date) === month)
-    if (subs.length === 0) return text('Ainda não vejo assinaturas registradas. Envie sua fatura e eu encontro as cobranças recorrentes.')
+    if (subs.length === 0) return text('Ainda não vejo assinaturas registradas. Importe sua fatura e eu encontro as cobranças recorrentes.')
     const top = [...subs].sort((a, b) => b.amount - a.amount).slice(0, 2)
     const saving = top.reduce((s, t) => s + t.amount, 0) * 4
     return {

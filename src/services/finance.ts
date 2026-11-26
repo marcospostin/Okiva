@@ -35,6 +35,8 @@ export type GoalInput = Omit<Goal, 'id' | 'startedAt' | 'initialSaved' | 'deposi
 
 export interface ImportInvoiceInput {
   cardId: string | null
+  /** Extrato de conta: os lançamentos entram nesta conta (cardId fica null) */
+  accountId?: string | null
   /** Total impresso na fatura; vira a fatura atual do cartão */
   total: number
   fileName: string
@@ -48,6 +50,8 @@ export interface ImportInvoiceResult {
   /** Cada lançamento volta com `invoiceId` = invoice.id */
   transactions: Transaction[]
   card: Card | null
+  /** Cartões cuja fatura mudou por pagamento de fatura lido no extrato */
+  cards?: Card[]
 }
 
 /** Dados que o backend devolve no login / ao abrir o app. */
@@ -111,7 +115,7 @@ const invoicesRest = {
    * POST /api/invoices/import — grava os lançamentos confirmados.
    * O servidor deve ser idempotente por (cardId, fileName, total) para evitar duplicatas.
    */
-  import: (input: ImportInvoiceInput, currentCard: Card | null, importedAt: string): Promise<ImportInvoiceResult> => {
+  import: (input: ImportInvoiceInput, currentCard: Card | null, importedAt: string, allCards: Card[] = []): Promise<ImportInvoiceResult> => {
     if (!USE_MOCK) return request('POST', '/api/invoices/import', input)
     const invoice: InvoiceImport = {
       id: `inv_${uid()}`,
@@ -120,7 +124,14 @@ const invoicesRest = {
       total: input.total,
       importedAt,
       previousInvoice: currentCard?.invoice ?? null,
+      accountId: input.accountId ?? null,
     }
+    // Pagamento de fatura lido no extrato abate a fatura do cartão escolhido
+    const paid = new Map<string, number>()
+    for (const t of input.items) {
+      if (t.kind === 'invoice_payment' && t.method.type === 'card') paid.set(t.method.cardId, (paid.get(t.method.cardId) ?? 0) + t.amount)
+    }
+    const cards = allCards.filter((c) => paid.has(c.id)).map((c) => ({ ...c, invoice: round2(c.invoice - paid.get(c.id)!) }))
     const ongoing = currentCard
       ? (input.ongoing ?? []).flatMap((o) =>
           buildOngoingInstallments({ ...o, cardId: currentCard.id, invoiceId: invoice.id, currentInInvoice: true }, currentCard, importedAt),
@@ -131,6 +142,7 @@ const invoicesRest = {
         invoice,
         transactions: [...input.items.map((t) => ({ ...t, id: uid(), invoiceId: invoice.id })), ...ongoing],
         card: currentCard ? { ...currentCard, invoice: input.total } : null,
+        cards,
       },
       500,
     )
