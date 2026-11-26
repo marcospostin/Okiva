@@ -1,7 +1,8 @@
 import { FileText } from 'lucide-react'
 import { Asset } from '../components/icons'
 import { EmptyState, LinkButton, ListPanel, ListRow, Page, PrimaryButton, ProgressBar, RoundButton, ScreenHeader, SectionHeader } from '../components/ui'
-import { brlShort, longDate, pct, privateMoney } from '../lib/format'
+import { brl, brlShort, longDate, pct, privateMoney } from '../lib/format'
+import { invoiceCredit, invoiceDue } from '../lib/ledger'
 import { cardsApi } from '../services/finance'
 import { cardShort, daysUntilDue, todayISO, useStore } from '../state/store'
 import { useUI } from '../state/ui'
@@ -30,8 +31,11 @@ export default function Cards() {
         .filter((t) => t.method.type === 'card' && t.method.cardId === front.id && (t.kind ?? 'expense') === 'expense' && t.date > todayISO())
         .reduce((sum, t) => sum + t.amount, 0)
     : 0
-  const committed = front ? front.invoice + future : 0
-  const used = front ? pct(committed, front.limit) : 0
+  // Crédito (pagou a mais) libera limite até ser usado: R$ 5.000 + R$ 200 de crédito = R$ 5.200
+  const credit = front ? invoiceCredit(front) : 0
+  const committed = front ? invoiceDue(front) + future : 0
+  const limit = front ? front.limit + credit : 0
+  const used = front ? pct(committed, limit) : 0
   const upcoming = [...state.cards].sort((a, b) => daysUntilDue(a) - daysUntilDue(b))
 
   const addCard = (
@@ -94,7 +98,7 @@ export default function Cards() {
                               <span className="text-[13px] opacity-70">{dueLabel(daysUntilDue(c))}</span>
                             </p>
                             <p className="pt-[6px] font-sat text-[46px] leading-[46px] font-medium tracking-[-2.07px] whitespace-nowrap">
-                              {privateMoney(brlShort(c.invoice), hidden)}
+                              {privateMoney(brlShort(invoiceDue(c)), hidden)}
                             </p>
                           </div>
                         )}
@@ -110,14 +114,21 @@ export default function Cards() {
                   <span className="font-medium text-white">{used}%</span>
                 </div>
                 <ProgressBar value={used} className="mt-[10px]" />
+                {credit > 0 && (
+                  <p className="mt-3 rounded-[18px] bg-esk-positive/10 px-4 py-3 font-sat text-[13px] leading-[1.4] text-esk-text-2">
+                    <span className="font-medium text-esk-positive">Crédito de {privateMoney(brl(credit), hidden)}</span> · se não for usado, vira desconto na
+                    próxima fatura
+                  </p>
+                )}
                 <p className="pt-3 font-sat text-[13px] text-esk-subtle">
-                  {privateMoney(brlShort(committed), hidden)} de {privateMoney(brlShort(front.limit), hidden)}
+                  {privateMoney(brlShort(committed), hidden)} de {privateMoney(brlShort(limit), hidden)}
+                  {credit > 0 && ` (${privateMoney(brlShort(front.limit), hidden)} + ${privateMoney(brlShort(credit), hidden)} de crédito)`}
                   {future > 0 && ` · inclui ${privateMoney(brlShort(Math.round(future)), hidden)} de parcelas futuras`}
                   {ordered.length > 1 && ' · toque na pilha para trocar'}
                 </p>
                 <div className="flex flex-col gap-3 pt-4">
-                  <PrimaryButton onClick={() => openSheet({ type: 'payInvoice', cardId: front.id })} disabled={front.invoice <= 0}>
-                    {front.invoice > 0 ? `Pagar fatura ${cardShort(front)}` : 'Fatura paga'}
+                  <PrimaryButton onClick={() => openSheet({ type: 'payInvoice', cardId: front.id })} disabled={invoiceDue(front) <= 0}>
+                    {invoiceDue(front) > 0 ? `Pagar fatura ${cardShort(front)}` : 'Fatura paga'}
                   </PrimaryButton>
                   <p className="font-sat text-[12px] text-esk-subtle">Os gastos no cartão saem do saldo quando você paga a fatura.</p>
                   <div className="flex flex-wrap gap-x-5 gap-y-2">
@@ -142,7 +153,7 @@ export default function Cards() {
                       icon={<Asset name="04670.svg" size={20} />}
                       title={cardShort(c)}
                       subtitle={dueLabel(d)}
-                      value={privateMoney(brlShort(c.invoice), hidden)}
+                      value={invoiceCredit(c) > 0 ? `Crédito ${privateMoney(brlShort(invoiceCredit(c)), hidden)}` : privateMoney(brlShort(c.invoice), hidden)}
                     />
                   )
                 })}

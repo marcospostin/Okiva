@@ -8,6 +8,8 @@ export type SheetState =
   | { type: 'add'; kind?: 'expense' | 'income' }
   /** Pagar a fatura de um cartão (ou editar um pagamento: id) */
   | { type: 'payInvoice'; cardId?: string; id?: string }
+  /** Adiantar parcelas de uma compra parcelada no cartão */
+  | { type: 'anticipate'; group: string }
   /** Compra parcelada que começou antes do Okiva (id = editar uma existente) */
   | { type: 'ongoing'; cardId?: string; id?: string }
   /** Nova conta (sem id) ou editar/excluir */

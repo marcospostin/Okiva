@@ -1,12 +1,12 @@
 import { Camera, Check } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { categoryIds, categoryMeta, hasCategory } from '../data/categories'
-import type { AppState, CategoryId } from '../types'
+import type { CategoryId } from '../types'
 import { Asset, CategoryRowIcon } from '../components/icons'
 import { ActionRow, Chip, CountUp, cx, FeatureCard, LinkButton, ListPanel, ListRow, Page, PrimaryButton, ProgressBar, RoundButton, ScreenHeader, SectionHeader } from '../components/ui'
 import { brl, brlShort, monthKey, privateMoney } from '../lib/format'
 import { readInvoice, withInstallments, type InvoiceResult } from '../services/ai'
-import { installmentsApi, invoicesApi, type AccountSnapshot } from '../services/finance'
+import { invoicesApi } from '../services/finance'
 import { errorMessage } from '../services/http'
 import { cardLabel, currentMonth, ruleFor, todayISO, useStore } from '../state/store'
 import { useMutation } from '../state/useMutation'
@@ -76,8 +76,9 @@ export default function Invoice() {
     const comuns = items.filter((it) => !parceladas.includes(it))
     const ok = await run(
       'confirm',
-      async () => {
-        const r = await invoicesApi.import(
+      // Uma operação só no banco: lançamentos, parcelas em andamento e a fatura entram juntos
+      () =>
+        invoicesApi.import(
           {
             cardId: card?.id ?? null,
             total: result.total,
@@ -90,42 +91,19 @@ export default function Invoice() {
               method: card ? { type: 'card', cardId: card.id } : { type: 'cash' },
               source: 'fatura',
             })),
-          },
-          card,
-          todayISO(),
-        )
-        if (!card || parceladas.length === 0) return { r, snapshot: null }
-        // Estado logo depois da importação (o modo local calcula em cima dele; o Supabase recarrega)
-        let working: AppState = {
-          ...state,
-          transactions: [...r.transactions, ...state.transactions],
-          cards: r.card ? state.cards.map((c) => (c.id === r.card!.id ? r.card! : c)) : state.cards,
-          invoices: [r.invoice, ...state.invoices],
-        }
-        let snapshot: AccountSnapshot | null = null
-        for (const it of parceladas) {
-          snapshot = await installmentsApi.saveOngoing(
-            {
+            ongoing: parceladas.map((it) => ({
               name: it.name,
               category: it.category,
-              cardId: card.id,
               amount: it.amount,
               current: it.installment!.number,
               total: it.installment!.total,
               date: it.date,
-              invoiceId: r.invoice.id,
-              currentInInvoice: true,
-            },
-            working,
-          )
-          working = { ...working, ...snapshot }
-        }
-        return { r, snapshot }
-      },
-      ({ r, snapshot }) => {
-        dispatch({ type: 'importInvoice', txs: r.transactions, card: r.card, invoice: r.invoice })
-        if (snapshot) dispatch({ type: 'sync', snapshot })
-      },
+            })),
+          },
+          card,
+          todayISO(),
+        ),
+      (r) => dispatch({ type: 'importInvoice', txs: r.transactions, card: r.card, invoice: r.invoice }),
       () => {
         const n = comuns.length + parceladas.length
         const extra = parceladas.reduce((s, it) => s + (it.installment!.total - it.installment!.number), 0)

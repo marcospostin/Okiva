@@ -8,7 +8,7 @@
  * Contrato completo (rotas, payloads, erros): docs/integracao-backend.md
  */
 import { toISO, uid } from '../lib/format'
-import { adjustInvoice, buildInstallments, buildOngoingInstallments, processDueLocal, round2, type InstallmentInput, type OngoingInstallmentInput } from '../lib/ledger'
+import { adjustInvoice, anticipateInstallments, buildInstallments, buildOngoingInstallments, processDueLocal, round2, type InstallmentInput, type OngoingInstallmentInput } from '../lib/ledger'
 import { TODAY } from '../data/mock'
 import type { Account, AppState, Budget, CapAlert, Card, CategoryId, CategoryRule, CustomCategory, Goal, GoalDeposit, InvoiceImport, Recurrence, Transaction, User } from '../types'
 import { mockDelay, request, USE_MOCK, USE_SUPABASE } from './http'
@@ -39,6 +39,8 @@ export interface ImportInvoiceInput {
   total: number
   fileName: string
   items: TransactionInput[]
+  /** Compras parceladas lidas na fatura (com cartão): criadas na mesma operação da importação */
+  ongoing?: Omit<OngoingInstallmentInput, 'cardId' | 'invoiceId' | 'currentInInvoice'>[]
 }
 
 export interface ImportInvoiceResult {
@@ -119,10 +121,15 @@ const invoicesRest = {
       importedAt,
       previousInvoice: currentCard?.invoice ?? null,
     }
+    const ongoing = currentCard
+      ? (input.ongoing ?? []).flatMap((o) =>
+          buildOngoingInstallments({ ...o, cardId: currentCard.id, invoiceId: invoice.id, currentInInvoice: true }, currentCard, importedAt),
+        )
+      : []
     return mock(
       {
         invoice,
-        transactions: input.items.map((t) => ({ ...t, id: uid(), invoiceId: invoice.id })),
+        transactions: [...input.items.map((t) => ({ ...t, id: uid(), invoiceId: invoice.id })), ...ongoing],
         card: currentCard ? { ...currentCard, invoice: input.total } : null,
       },
       500,
@@ -263,6 +270,23 @@ const installmentsRest = {
     const cards = fresh.filter((x) => !x.invoiceId).reduce((c, x) => adjustInvoice(c, x, 1, t), current.cards)
     const transactions = [...fresh, ...current.transactions].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0))
     return mock(snapshotOf({ ...current, cards, transactions }))
+  },
+  /** POST /api/installments/replace-tx — gasto à vista vira parcelado (uma operação só). */
+  replaceTx: (txId: string, input: InstallmentInput, current: AppState): Promise<AccountSnapshot> => {
+    if (!USE_MOCK) return request('POST', '/api/installments/replace-tx', { txId, ...input })
+    const old = current.transactions.find((x) => x.id === txId)
+    const t = today()
+    const without = old ? { ...current, transactions: current.transactions.filter((x) => x.id !== txId), cards: adjustInvoice(current.cards, old, -1, t) } : current
+    return installmentsRest.save(input, without)
+  },
+  /** POST /api/installments/:group/to-single — compra parcelada vira à vista (uma operação só). */
+  toSingle: (group: string, tx: TransactionInput, _current?: AppState): Promise<Transaction> =>
+    USE_MOCK ? mock({ ...tx, id: uid() }) : request('POST', `/api/installments/${group}/to-single`, tx),
+  /** POST /api/installments/:group/anticipate — traz as últimas parcelas futuras para a fatura de hoje. Devolve as parcelas alteradas. */
+  anticipate: (group: string, count: number, discount: number, date: string, current: AppState): Promise<Transaction[]> => {
+    if (!USE_MOCK) return request('POST', `/api/installments/${group}/anticipate`, { count, discount, date })
+    const all = current.transactions.filter((x) => x.installment?.group === group)
+    return mock(anticipateInstallments(all, count, discount, date))
   },
   /** PATCH /api/installments/:group — muda nome, categoria e valor da parcela em todas as parcelas (compra em andamento). */
   updateGroup: (group: string, patch: { name: string; category: CategoryId | null; amount: number }, current: AppState): Promise<AccountSnapshot> => {

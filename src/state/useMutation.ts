@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { errorMessage } from '../services/http'
+import { errorMessage, StaleError } from '../services/http'
 import { useUI } from './ui'
 
 /**
@@ -40,6 +40,11 @@ export function useMutation() {
         if (success) notify(typeof success === 'function' ? success(result) : success)
         return true
       } catch (err) {
+        // Gravou, mas não deu para atualizar a tela: fecha (sem gravar em dobro) e avisa
+        if (err instanceof StaleError) {
+          notify(err.message, 'info')
+          return true
+        }
         notify(errorMessage(err, failure), 'error')
         return false
       } finally {

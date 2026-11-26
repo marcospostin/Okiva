@@ -32,6 +32,9 @@ Especificação de negócio: [modelo-de-dados.md](modelo-de-dados.md) · contrat
 | `supabase/migrations/20261128120000_okiva_icone_casa.sql` | ícone `home` para metas |
 | `supabase/migrations/20261128120100_okiva_demo_completa.sql` | conta de demonstração completa (renda R$ 7.000, subcontas, 3 cartões, recorrências, parceladas, transferências, rendimento, fatura lida pela IA, metas com "Imóvel próprio") |
 | `supabase/migrations/20261129120000_okiva_banco_apelido.sql` | `accounts.nickname` (apelido; o nome é o banco) e `cards.bank` (banco do cartão; nickname vira apelido) |
+| `supabase/migrations/20261130120000_okiva_saldo_exclusoes.sql` | `balance_of` igual ao app (transferência 0, ajuste com sinal) e `set_balance` certo; `clear_my_data` apaga contas uma a uma (subcontas primeiro); cartão removido: `transactions.removed_card`, compras fora do saldo e pagamentos continuam pagamentos |
+| `supabase/migrations/20261201120000_okiva_credito_adiantar.sql` | Fatura sem corte em zero (negativa = crédito de quem pagou a mais); desfazer importação pela diferença; RPC `anticipate_installments` (adiantar as últimas parcelas para a fatura de hoje, com desconto) |
+| `supabase/migrations/20261202120000_okiva_operacoes_atomicas.sql` | Operações "tudo ou nada": `replace_tx_with_installments` (à vista → parcelado), `replace_installments_with_tx` (parcelado → à vista) e `import_invoice` com `p_ongoing` (parcelas lidas na fatura entram na mesma transação) |
 | `supabase/migrations/20261124180000_okiva_conta_suporte_seguranca.sql` | preferências de notificação, mensagens de suporte e confirmação por e-mail para apagar dados |
 | `supabase/templates/*.html` | e-mails em português (cadastro, código de confirmação, redefinir senha, trocar e-mail): colar no dashboard |
 | `supabase/seed.sql` | **seed temporário** da conta demo (mocks) |

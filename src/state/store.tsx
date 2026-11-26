@@ -203,8 +203,10 @@ function reducer(state: AppState, action: Action): AppState {
       return {
         ...state,
         transactions: state.transactions.filter((t) => t.invoiceId !== inv.id),
-        // The card goes back to the invoice value it had before the import
-        cards: state.cards.map((c) => (c.id === inv.cardId && inv.previousInvoice !== null ? { ...c, invoice: inv.previousInvoice } : c)),
+        // Desfaz só o que a importação mudou (total − fatura de antes), sem apagar o que entrou depois
+        cards: state.cards.map((c) =>
+          c.id === inv.cardId && inv.previousInvoice !== null ? { ...c, invoice: round2(c.invoice - (inv.total - inv.previousInvoice)) } : c,
+        ),
         invoices: state.invoices.filter((i) => i.id !== inv.id),
       }
     }
@@ -216,7 +218,9 @@ function reducer(state: AppState, action: Action): AppState {
       // New cards go to the front of the wallet (colors follow stack position on screen)
       return { ...state, cards: [...state.cards, card], cardOrder: [...state.cardOrder, card.id] }
     }
-    case 'deleteCard':
+    case 'deleteCard': {
+      const gone = state.cards.find((c) => c.id === action.id)
+      const removedLabel = gone ? cardLabel(gone).slice(0, 60) : 'Cartão'
       return {
         ...state,
         cards: state.cards.filter((c) => c.id !== action.id),
@@ -224,15 +228,18 @@ function reducer(state: AppState, action: Action): AppState {
         transactions: state.transactions
           // Ajuste da fatura só valia para este cartão
           .filter((t) => !(kindOf(t) === 'adjustment' && t.method.type === 'card' && t.method.cardId === action.id))
+          // Compras e pagamentos ficam no histórico com o nome do cartão (mesma regra do banco):
+          // compra fora do saldo, pagamento continua tirando do saldo
           .map((t) =>
             t.method.type === 'card' && t.method.cardId === action.id
-              ? { ...t, kind: kindOf(t) === 'invoice_payment' ? 'expense' : t.kind, method: { type: 'cash' } }
+              ? { ...t, method: { type: 'cash' }, removedCard: removedLabel }
               : t,
           ),
         recurrences: state.recurrences.map((r) => (r.method.type === 'card' && r.method.cardId === action.id ? { ...r, method: { type: 'cash' } } : r)),
         // Imported invoices stay in the history, no longer tied to a card
         invoices: state.invoices.map((i) => (i.cardId === action.id ? { ...i, cardId: null, previousInvoice: null } : i)),
       }
+    }
     case 'cycleCards': {
       if (state.cardOrder.length < 2) return state
       const front = state.cardOrder[state.cardOrder.length - 1]
@@ -494,6 +501,8 @@ export function accountTransactions(state: AppState, accountId: string) {
       const k = kindOf(t)
       if (k === 'transfer') return t.transferAccountId === accountId || (t.accountId ?? first) === accountId
       if ((k === 'expense' || k === 'adjustment') && t.method.type === 'card') return false
+      // Compra de cartão removido não saiu de nenhuma conta
+      if (k === 'expense' && t.removedCard) return false
       return (t.accountId ?? first) === accountId
     })
     .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0))
@@ -643,8 +652,9 @@ export function goalPace(goal: Goal) {
   return { average, monthsLeft }
 }
 
-export function methodLabel(state: AppState, t: Pick<Transaction, 'method' | 'kind' | 'accountId'>) {
+export function methodLabel(state: AppState, t: Pick<Transaction, 'method' | 'kind' | 'accountId' | 'removedCard'>) {
   if (kindOf(t) === 'income') return accountName(state, t.accountId)
+  if (t.removedCard) return `${t.removedCard} (removido)`
   if (t.method.type === 'pix') return 'Pix'
   if (t.method.type === 'cash') return 'Dinheiro'
   const id = t.method.cardId

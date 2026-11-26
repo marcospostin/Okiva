@@ -3,7 +3,7 @@
  * pagar fatura, contas, recorrências e aviso de teto.
  */
 import { useRef, useState } from 'react'
-import { ArrowLeftRight, BellRing, ChevronRight, Minus, Plus, Repeat, Scale } from 'lucide-react'
+import { ArrowLeftRight, BellRing, ChevronRight, FastForward, Minus, Plus, Repeat, Scale } from 'lucide-react'
 import { categoryIds, categoryMeta, normalizeLabel } from '../data/categories'
 import { REPORTS_EVENT } from '../lib/reports'
 import { CategoryRowIcon } from '../components/icons'
@@ -12,17 +12,22 @@ import { searchTransactions } from '../lib/search'
 import { BankSuggestions } from '../components/BankSuggestions'
 import { BANK_LIST_ID } from '../data/banks'
 import { movementAmount } from '../lib/movements'
-import { brl, brlShort, longDate, monthKey, monthName, privateExpense, privateIncome, privateMoney } from '../lib/format'
+import { brl, brlShort, longDate, monthKey, monthName, parseISO, privateExpense, privateIncome, privateMoney } from '../lib/format'
 import {
   ACCOUNT_KINDS,
   addMonths,
+  anticipateInstallments,
   currentAlreadyInInvoice,
+  futureCardInstallments,
   INCOME_SOURCES,
   incomeLabel,
   installmentGroup,
+  invoiceCredit,
+  invoiceDue,
   isIncomeSource,
   kindOf,
   nextDate,
+  round2,
   splitInstallments,
 } from '../lib/ledger'
 import { accountBalance, accountLabel, accountName, capAlert, cardLabel, cardShort, subaccounts, topAccounts, capWarning, methodLabel, ruleFor, todayISO, uncategorized, useStore } from '../state/store'
@@ -234,10 +239,10 @@ export function EntrySheet({ close, id, initialKind }: { close: () => void; id?:
       const cardId = (txMethod as { cardId: string }).cardId
       const ok = await run(
         'save',
-        async () => {
-          // Era um gasto comum: sai o lançamento antigo e entram as parcelas
-          if (existing && !existing.installment) await transactionsApi.remove(existing.id)
-          return installmentsApi.save({ group: existing?.installment?.group, name: label, category, cardId, total: amount, count, firstDate: date }, state)
+        () => {
+          const input = { group: existing?.installment?.group, name: label, category, cardId, total: amount, count, firstDate: date }
+          // Era um gasto comum: o banco apaga o lançamento e cria as parcelas numa operação só
+          return existing && !existing.installment ? installmentsApi.replaceTx(existing.id, input, state) : installmentsApi.save(input, state)
         },
         (snapshot) => dispatch({ type: 'sync', snapshot }),
         warnText ?? `${count}x de ${privateMoney(brl(parts[parts.length - 1] ?? 0), hidden)} registrado`,
@@ -264,10 +269,8 @@ export function EntrySheet({ close, id, initialKind }: { close: () => void; id?:
       const g = existing.installment.group
       ok = await run(
         'save',
-        async () => {
-          await installmentsApi.remove(g)
-          return transactionsApi.create(tx)
-        },
+        // O banco apaga as parcelas e cria o lançamento numa operação só
+        () => installmentsApi.toSingle(g, tx, state),
         (saved) => {
           dispatch({ type: 'deleteGroup', group: g })
           dispatch({ type: 'addTx', tx: saved })
@@ -498,7 +501,7 @@ export function TransactionSheet({ close, id }: { close: () => void; id: string 
   } else if (k === 'income') {
     rows.push(['Origem', incomeLabel(t.category)], ['Recebido em', accountName(state, t.accountId)])
   } else if (k === 'invoice_payment') {
-    rows.push(['Cartão', card ? cardLabel(card) : 'Cartão removido'], ['Pago com', accountName(state, t.accountId)])
+    rows.push(['Cartão', card ? cardLabel(card) : t.removedCard ? `${t.removedCard} (removido)` : 'Cartão removido'], ['Pago com', accountName(state, t.accountId)])
   } else {
     rows.push(['Categoria', categoryMeta(state, t.category).label], ['Pagamento', methodLabel(state, t)])
     if (t.method.type !== 'card' && state.accounts.length > 1) rows.push(['Conta', accountName(state, t.accountId)])
@@ -600,6 +603,18 @@ export function TransactionSheet({ close, id }: { close: () => void; id: string 
           <ChevronRight size={16} aria-hidden />
         </button>
       )}
+      {t.installment && k === 'expense' && futureCardInstallments(group, today).length > 0 && (
+        <button
+          type="button"
+          onClick={() => openSheet({ type: 'anticipate', group: t.installment!.group })}
+          className="mt-3 flex w-full items-center justify-between gap-3 rounded-[20px] px-1 py-2 text-left font-sat text-[14px] font-medium text-esk-lime-soft hover:underline"
+        >
+          <span className="flex items-center gap-2">
+            <FastForward size={15} aria-hidden /> Adiantar parcelas
+          </span>
+          <ChevronRight size={16} aria-hidden />
+        </button>
+      )}
       {rec && (
         <button
           type="button"
@@ -639,9 +654,109 @@ export function TransactionSheet({ close, id }: { close: () => void; id: string 
           <PrimaryButton tone="danger" onClick={() => setConfirming(true)}>
             {t.installment ? 'Apagar compra' : 'Apagar'}
           </PrimaryButton>
-          {k !== 'adjustment' && <PrimaryButton onClick={edit}>Editar</PrimaryButton>}
+          {k !== 'adjustment' && !(k === 'invoice_payment' && !card) && <PrimaryButton onClick={edit}>Editar</PrimaryButton>}
         </div>
       )}
+    </Sheet>
+  )
+}
+
+/* ------------------------------------------------------------- Adiantar parcelas */
+
+export function AnticipateSheet({ close, group }: { close: () => void; group: string }) {
+  const { state, dispatch } = useStore()
+  const { run, pending } = useMutation()
+  const hidden = state.hideBalance
+  const today = todayISO()
+  const all = installmentGroup(state, group)
+  const future = useLast(futureCardInstallments(all, today))
+  const [count, setCount] = useState(1)
+  const [discount, setDiscount] = useState(0)
+  const [tries, setTries] = useState(0)
+  if (!future || future.length === 0) return null
+  const n = future.length
+  const k = Math.min(count, n)
+  const picked = future.slice(0, k)
+  const gross = Math.round(picked.reduce((sum, t) => sum + t.amount, 0) * 100) / 100
+  const net = Math.round((gross - discount) * 100) / 100
+  const first = all[0]
+  const card = first?.method.type === 'card' ? state.cards.find((c) => c.id === (first.method as { cardId: string }).cardId) : undefined
+  const total = all[0]?.installment?.total ?? 0
+  const numbers = picked.map((t) => t.installment?.number ?? 0).sort((a, b) => a - b)
+  const range = numbers.length === 1 ? `Parcela ${numbers[0]}` : `Parcelas ${numbers[0]} a ${numbers[numbers.length - 1]}`
+  // Depois de adiantar, a compra termina na última parcela que sobrou no futuro
+  const stillFuture = future.slice(k)
+  const endsOn = stillFuture.length ? stillFuture.reduce((a, b) => (a.date > b.date ? a : b)).date : null
+  const endsLabel = endsOn ? `${monthName(parseISO(endsOn).getMonth())} de ${parseISO(endsOn).getFullYear()}` : null
+  const discountError = tries > 0 && discount >= gross ? 'O desconto precisa ser menor que o valor das parcelas.' : undefined
+
+  async function save() {
+    setTries((x) => x + 1)
+    if (discount >= gross) return
+    const preview = anticipateInstallments(all, k, discount, today)
+    if (preview.length !== k) return
+    const ok = await run(
+      'save',
+      () => installmentsApi.anticipate(group, k, discount, today, state),
+      (txs) => txs.forEach((tx) => dispatch({ type: 'updateTx', tx })),
+      `${privateMoney(brl(net), hidden)} entraram na fatura${card ? ` ${cardShort(card)}` : ''}`,
+    )
+    if (ok) close()
+  }
+
+  return (
+    <Sheet title="Adiantar parcelas" onClose={close}>
+      <form className="flex flex-col gap-5" onSubmit={(e) => { e.preventDefault(); save() }}>
+        <div>
+          <p className="font-sat text-[17px] font-medium text-white">{first?.name}</p>
+          <p className="pt-1 font-sat text-[13px] text-esk-muted">
+            {card ? `${cardLabel(card)} · ` : ''}
+            {n === 1 ? 'Falta 1 parcela' : `Faltam ${n} parcelas`} de {total}
+          </p>
+        </div>
+        <Field label="Quantas parcelas adiantar">
+          <div className="flex items-center gap-3">
+            <div className="flex h-[44px] items-center gap-1 rounded-[22px] bg-esk-elevated px-1 ring-1 ring-esk-track">
+              <button type="button" aria-label="Menos uma parcela" onClick={() => setCount((x) => Math.max(1, Math.min(x, n) - 1))} className="grid size-[36px] place-items-center rounded-full text-white hover:bg-white/5 disabled:opacity-30" disabled={k <= 1}>
+                <Minus size={15} />
+              </button>
+              <span className="min-w-[28px] text-center font-sat text-[17px] font-medium text-white" aria-live="polite">{k}</span>
+              <button type="button" aria-label="Mais uma parcela" onClick={() => setCount((x) => Math.min(n, x + 1))} className="grid size-[36px] place-items-center rounded-full text-white hover:bg-white/5 disabled:opacity-30" disabled={k >= n}>
+                <Plus size={15} />
+              </button>
+            </div>
+            <button type="button" onClick={() => setCount(n)} className="font-sat text-[13px] font-medium text-esk-lime-soft hover:underline">
+              Todas ({n})
+            </button>
+          </div>
+          <p className="font-sat text-[12px] text-esk-subtle">Como nos bancos: as últimas parcelas são adiantadas primeiro.</p>
+        </Field>
+        <Field label="Desconto do banco (opcional)" htmlFor="discount" error={discountError} attempt={tries}>
+          <MoneyInput id="discount" value={discount} onChange={setDiscount} />
+        </Field>
+        <div className="flex flex-col gap-2 rounded-[18px] bg-esk-elevated px-4 py-3 font-sat text-[14px]">
+          <p className="flex justify-between gap-3 text-esk-muted">
+            <span>{range}</span>
+            <span className="text-white">{privateMoney(brl(gross), hidden)}</span>
+          </p>
+          {discount > 0 && (
+            <p className="flex justify-between gap-3 text-esk-muted">
+              <span>Desconto</span>
+              <span className="text-esk-positive">− {privateMoney(brl(discount), hidden)}</span>
+            </p>
+          )}
+          <p className="flex justify-between gap-3 border-t border-esk-track pt-2 font-medium text-white">
+            <span>Entra na fatura atual</span>
+            <span>{privateMoney(brl(Math.max(0, net)), hidden)}</span>
+          </p>
+          <p className="text-[13px] leading-[1.4] text-esk-muted">
+            {endsLabel ? `A compra passa a terminar em ${endsLabel}.` : 'A compra fica quitada.'} O valor conta nos gastos deste mês.
+          </p>
+        </div>
+        <PrimaryButton type="submit" loading={pending === 'save'}>
+          {k === 1 ? 'Adiantar 1 parcela' : `Adiantar ${k} parcelas`}
+        </PrimaryButton>
+      </form>
     </Sheet>
   )
 }
@@ -657,13 +772,16 @@ export function PayInvoiceSheet({ close, cardId, id }: { close: () => void; card
   const initialCard = existing?.method.type === 'card' ? existing.method.cardId : (cardId ?? state.cards[0]?.id ?? '')
   const [card, setCard] = useState(initialCard)
   const current = state.cards.find((c) => c.id === card)
-  const [amount, setAmount] = useState(existing?.amount ?? current?.invoice ?? 0)
+  const [amount, setAmount] = useState(existing?.amount ?? (current ? invoiceDue(current) : 0))
   const [accountId, setAccountId] = useState(existing?.accountId ?? state.accounts[0]?.id ?? '')
   const [date, setDate] = useState(existing?.date ?? today)
   const [tries, setTries] = useState(0)
   const [confirmDelete, setConfirmDelete] = useState(false)
   if (!current && !existing) return null
   const balance = accountId ? accountBalance(state, accountId) : 0
+  // Quanto a fatura pede (editando, o próprio pagamento ainda está descontado dela)
+  const owed = current ? Math.max(0, round2(current.invoice + (existing && existing.method.type === 'card' && existing.method.cardId === card && existing.posted !== false ? existing.amount : 0))) : 0
+  const extra = current ? round2(amount - owed) : 0
 
   async function save() {
     setTries((n) => n + 1)
@@ -680,7 +798,14 @@ export function PayInvoiceSheet({ close, cardId, id }: { close: () => void; card
     }
     const ok = existing
       ? await run('save', () => transactionsApi.update({ ...tx, id: existing.id }), (saved) => dispatch({ type: 'updateTx', tx: saved }), 'Pagamento atualizado')
-      : await run('save', () => transactionsApi.create(tx), (saved) => dispatch({ type: 'addTx', tx: saved }), `Fatura paga: ${privateMoney(brl(amount), hidden)} saiu de ${accountName(state, accountId)}`)
+      : await run(
+          'save',
+          () => transactionsApi.create(tx),
+          (saved) => dispatch({ type: 'addTx', tx: saved }),
+          extra > 0
+            ? `Fatura paga. ${privateMoney(brl(extra), hidden)} ficam de crédito para a próxima fatura`
+            : `Fatura paga: ${privateMoney(brl(amount), hidden)} saiu de ${accountName(state, accountId)}`,
+        )
     if (ok) close()
   }
 
@@ -691,7 +816,7 @@ export function PayInvoiceSheet({ close, cardId, id }: { close: () => void; card
           <Field label="Cartão">
             <div className="flex flex-wrap gap-2">
               {state.cards.map((c) => (
-                <Chip key={c.id} active={card === c.id} onClick={() => { setCard(c.id); if (!existing) setAmount(c.invoice) }}>
+                <Chip key={c.id} active={card === c.id} onClick={() => { setCard(c.id); if (!existing) setAmount(invoiceDue(c)) }}>
                   {cardShort(c)}
                 </Chip>
               ))}
@@ -701,11 +826,21 @@ export function PayInvoiceSheet({ close, cardId, id }: { close: () => void; card
         <Field label="Valor pago" htmlFor="pay" error={tries && amount <= 0 ? 'Digite o valor pago.' : undefined} attempt={tries}>
           <MoneyInput id="pay" value={amount} onChange={setAmount} large autoFocus />
         </Field>
-        {current && !existing && (
+        {current && !existing && extra <= 0 && (
           <p className="-mt-2 font-sat text-[13px] text-esk-muted">
-            Fatura atual: {privateMoney(brl(current.invoice), hidden)}
-            {amount > 0 && amount < current.invoice && ` · ficam ${privateMoney(brl(current.invoice - amount), hidden)} em aberto`}
+            Fatura atual: {privateMoney(brl(owed), hidden)}
+            {invoiceCredit(current) > 0 && ` · crédito de ${privateMoney(brl(invoiceCredit(current)), hidden)}`}
+            {amount > 0 && amount < owed && ` · ficam ${privateMoney(brl(owed - amount), hidden)} em aberto`}
           </p>
+        )}
+        {current && extra > 0 && (
+          <div role="status" className="-mt-2 rounded-[18px] bg-esk-lilac/15 px-4 py-3 font-sat text-[13px] leading-[1.45] text-esk-text-2">
+            <p className="font-medium text-esk-lilac">Você está pagando mais que a fatura</p>
+            <p className="pt-1">
+              São {privateMoney(brl(amount), hidden)} numa fatura de {privateMoney(brl(owed), hidden)}. Os {privateMoney(brl(extra), hidden)} a mais viram
+              crédito: liberam limite e, se não forem usados, viram desconto na próxima fatura.
+            </p>
+          </div>
         )}
         <Field label="Pago com">
           <AccountChips value={accountId} onChange={setAccountId} accounts={state.accounts} />
@@ -718,7 +853,7 @@ export function PayInvoiceSheet({ close, cardId, id }: { close: () => void; card
           Os gastos no cartão já contaram no mês de cada compra. Pagar a fatura tira o dinheiro do saldo e não conta de novo no teto.
         </p>
         <PrimaryButton type="submit" loading={pending === 'save'}>
-          {existing ? 'Salvar alterações' : 'Confirmar pagamento'}
+          {extra > 0 ? 'Pagar mesmo assim' : existing ? 'Salvar alterações' : 'Confirmar pagamento'}
         </PrimaryButton>
         {existing && (
           <ConfirmDelete
@@ -1037,15 +1172,23 @@ export function ReconcileSheet({ close, accountId, cardId }: { close: () => void
       'save',
       async () => {
         const saved = await transactionsApi.create(tx)
-        const applyCheck = await markChecked(real)
+        // O lançamento já foi gravado: se só a data da conferência falhar, não desfaz nem repete o lançamento
+        const applyCheck = await markChecked(real).catch(() => null)
         return { saved, applyCheck }
       },
       ({ saved, applyCheck }) => {
         // Primeiro a data (com a fatura de antes), depois o lançamento soma uma vez só
-        applyCheck()
+        applyCheck?.()
         dispatch({ type: 'addTx', tx: saved })
       },
-      choice === 'rendimento' ? 'Rendimento lançado · conferido hoje' : choice === 'tarifa' ? 'Lançado · classifique a categoria depois' : 'Ajuste lançado · conferido hoje',
+      ({ applyCheck }) =>
+        !applyCheck
+          ? 'Lançado. A data da conferência não foi salva: confira de novo depois'
+          : choice === 'rendimento'
+            ? 'Rendimento lançado · conferido hoje'
+            : choice === 'tarifa'
+              ? 'Lançado · classifique a categoria depois'
+              : 'Ajuste lançado · conferido hoje',
     )
     if (ok) close()
   }

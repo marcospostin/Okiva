@@ -22,6 +22,18 @@ export const USE_AI_MOCK = USE_MOCK || (USE_SUPABASE && !import.meta.env.VITE_AP
 const BASE_URL = (import.meta.env.VITE_API_URL ?? '').replace(/\/$/, '')
 const TOKEN_KEY = 'okiva:token'
 
+/**
+ * A gravação deu certo, mas uma etapa seguinte (recarregar os dados, destacar a meta…) falhou.
+ * Não é erro para quem usa: o formulário fecha e pedimos para atualizar a tela, em vez de deixar
+ * a pessoa tentar de novo e gravar em dobro.
+ */
+export class StaleError extends Error {
+  constructor(message = 'Salvo. Atualize a página para ver tudo em dia.') {
+    super(message)
+    this.name = 'StaleError'
+  }
+}
+
 export class ApiError extends Error {
   constructor(
     message: string,

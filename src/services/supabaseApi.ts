@@ -26,7 +26,7 @@ import type {
   RecurrenceInput,
   TransactionInput,
 } from './finance'
-import { ApiError } from './http'
+import { ApiError, StaleError } from './http'
 import { sb } from './supabase'
 
 type Tables = Database['public']['Tables']
@@ -82,6 +82,7 @@ export const toTx = (r: Row<'transactions'>): Transaction => ({
   recurrenceId: r.recurrence_id ?? undefined,
   posted: r.posted,
   alreadyInInvoice: r.already_in_invoice || undefined,
+  removedCard: r.removed_card ?? undefined,
 })
 
 // Parcelas e recorrência não vão no insert/update comum: parcelas passam por save_installments
@@ -279,14 +280,14 @@ async function updateProfile(patch: Partial<Pick<User, 'name' | 'avatar'>>): Pro
       const path = await uploadAvatar(patch.avatar)
       update.avatar_url = path
       result.avatar = await avatarUrl(path)
-      await clearAvatars(path).catch(() => undefined)
     } else {
       update.avatar_url = null
       result.avatar = undefined
-      await clearAvatars().catch(() => undefined)
     }
   }
   await run(sb().from('profiles').update(update).eq('id', id))
+  // Só depois de o perfil apontar para a foto nova: se o update falhar, a antiga continua lá
+  if ('avatar' in patch) await clearAvatars(patch.avatar ? update.avatar_url ?? undefined : undefined).catch(() => undefined)
   return result
 }
 
@@ -340,7 +341,15 @@ export const sbInvoicesApi = {
       card_id: t.method.type === 'card' ? t.method.cardId : null,
     }))
     const r = (await run(
-      sb().rpc('import_invoice', { p_card_id: input.cardId as string, p_file_name: input.fileName, p_total: input.total, p_items: items }),
+      sb().rpc('import_invoice', {
+        p_card_id: input.cardId as string,
+        p_file_name: input.fileName,
+        p_total: input.total,
+        p_items: items,
+        ...(input.ongoing?.length
+          ? { p_ongoing: input.ongoing.map((o) => ({ name: o.name, category: o.category, amount: o.amount, current: o.current, total: o.total, date: o.date })) }
+          : {}),
+      }),
     )) as unknown as ImportRpcResult
     // Idempotência: a mesma fatura (cartão + arquivo + total) não entra duas vezes
     if (r.duplicate) throw new ApiError('Essa fatura já foi importada. Veja em Cartões → Faturas importadas.', 409)
@@ -414,7 +423,9 @@ export const sbGoalsApi = {
           .single(),
       ),
     )
-    if (featured) await setFeatured(goal.id)
+    if (featured) await setFeatured(goal.id).catch(() => {
+      throw new StaleError('Meta criada. Atualize a página para ver qual é a principal.')
+    })
     return goal
   },
   update: async ({ featured, ...goal }: Goal & { featured?: boolean }) => {
@@ -428,7 +439,9 @@ export const sbGoalsApi = {
           .single(),
       ),
     )
-    if (featured) await setFeatured(saved.id)
+    if (featured) await setFeatured(saved.id).catch(() => {
+      throw new StaleError('Meta salva. Atualize a página para ver qual é a principal.')
+    })
     return saved
   },
   remove: async (id: string) => {
@@ -531,15 +544,20 @@ export const sbAccountsApi = {
 
 /** Depois de mexer em recorrências/parcelas o banco gera e ajusta lançamentos: recarrega tudo. */
 const reload = () => sbAccountApi.snapshot()
+/** Depois de gravar: se só a recarga falhar, a gravação valeu (StaleError fecha o formulário sem erro). */
+const reloadAfterSave = () =>
+  reload().catch(() => {
+    throw new StaleError()
+  })
 
 export const sbRecurrencesApi = {
   create: async (input: RecurrenceInput, _current?: AppState) => {
     await run(sb().from('recurrences').insert(fromRecurrence(input)).select().single())
-    return reload()
+    return reloadAfterSave()
   },
   update: async (r: Recurrence, _current?: AppState) => {
     await run(sb().from('recurrences').update(fromRecurrence(r)).eq('id', r.id).select().single())
-    return reload()
+    return reloadAfterSave()
   },
   remove: async (id: string) => {
     await run(sb().from('recurrences').delete().eq('id', id))
@@ -549,6 +567,46 @@ export const sbRecurrencesApi = {
 /* -------------------------------------------------------------- parcelas */
 
 export const sbInstallmentsApi = {
+  /** Gasto à vista vira parcelado: apaga e cria as parcelas numa transação só. */
+  replaceTx: async (txId: string, input: InstallmentInput, _current?: AppState) => {
+    await run(
+      sb().rpc('replace_tx_with_installments', {
+        p_tx: txId,
+        p_name: input.name,
+        p_category: (input.category ?? '') as string,
+        p_card_id: input.cardId,
+        p_total: input.total,
+        p_count: input.count,
+        p_first_date: input.firstDate,
+      }),
+    )
+    return reloadAfterSave()
+  },
+  /** Compra parcelada vira à vista: apaga as parcelas e cria o lançamento numa transação só. */
+  toSingle: async (group: string, tx: TransactionInput, _current?: AppState) => {
+    const row = fromTx(tx)
+    return toTx(
+      (await run(
+        sb().rpc('replace_installments_with_tx', {
+          p_group: group,
+          p_name: row.name,
+          p_category: (row.category ?? '') as string,
+          p_method_type: row.method_type,
+          p_card_id: row.card_id as string,
+          p_account_id: row.account_id as string,
+          p_date: row.date,
+          p_amount: row.amount,
+          p_source: row.source,
+          ...(row.invoice_id ? { p_invoice_id: row.invoice_id } : {}),
+        }),
+      )) as unknown as Row<'transactions'>,
+    )
+  },
+  /** Tudo numa transação no banco: as parcelas mudam de data e valor e a fatura acompanha (trigger). */
+  anticipate: async (group: string, count: number, discount: number, date: string, _current?: AppState) => {
+    const rows = await run(sb().rpc('anticipate_installments', { p_group: group, p_count: count, p_discount: discount, p_date: date }))
+    return (rows ?? []).map(toTx)
+  },
   save: async (input: InstallmentInput, _current?: AppState) => {
     await run(
       sb().rpc('save_installments', {
@@ -561,7 +619,7 @@ export const sbInstallmentsApi = {
         p_first_date: input.firstDate,
       }),
     )
-    return reload()
+    return reloadAfterSave()
   },
   saveOngoing: async (input: OngoingInstallmentInput, _current?: AppState) => {
     await run(
@@ -577,7 +635,7 @@ export const sbInstallmentsApi = {
         ...(input.currentInInvoice !== undefined ? { p_current_in_invoice: input.currentInInvoice } : {}),
       }),
     )
-    return reload()
+    return reloadAfterSave()
   },
   updateGroup: async (group: string, patch: { name: string; category: CategoryId | null; amount: number }, _current?: AppState) => {
     await run(
@@ -587,7 +645,7 @@ export const sbInstallmentsApi = {
         .eq('user_id', await uid())
         .eq('installment_group', group),
     )
-    return reload()
+    return reloadAfterSave()
   },
   remove: async (group: string) => {
     await run(sb().from('transactions').delete().eq('user_id', await uid()).eq('installment_group', group))

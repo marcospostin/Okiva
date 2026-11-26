@@ -578,6 +578,7 @@ export type Database = {
         Row: {
           transfer_account_id: string | null
           already_in_invoice: boolean
+          removed_card: string | null
           account_id: string | null
           amount: number
           card_id: string | null
@@ -601,6 +602,7 @@ export type Database = {
         Insert: {
           transfer_account_id?: string | null
           already_in_invoice?: boolean
+          removed_card?: string | null
           account_id?: string | null
           amount: number
           card_id?: string | null
@@ -624,6 +626,7 @@ export type Database = {
         Update: {
           transfer_account_id?: string | null
           already_in_invoice?: boolean
+          removed_card?: string | null
           account_id?: string | null
           amount?: number
           card_id?: string | null
@@ -709,6 +712,7 @@ export type Database = {
           p_card_id: string
           p_file_name: string
           p_items: Json
+          p_ongoing?: Json
           p_total: number
         }
         Returns: Json
@@ -759,6 +763,29 @@ export type Database = {
       seed_default_categories: { Args: { p_user: string }; Returns: undefined }
       seed_demo_account: { Args: never; Returns: undefined }
       set_balance: { Args: { p_balance: number }; Returns: number }
+      replace_tx_with_installments: {
+        Args: { p_tx: string; p_name: string; p_category: string; p_card_id: string; p_total: number; p_count: number; p_first_date: string }
+        Returns: string
+      }
+      replace_installments_with_tx: {
+        Args: {
+          p_group: string
+          p_name: string
+          p_category: string
+          p_method_type: Database['public']['Enums']['payment_method']
+          p_card_id: string
+          p_account_id: string
+          p_date: string
+          p_amount: number
+          p_source?: Database['public']['Enums']['tx_source']
+          p_invoice_id?: string
+        }
+        Returns: Database['public']['Tables']['transactions']['Row']
+      }
+      anticipate_installments: {
+        Args: { p_group: string; p_count: number; p_discount?: number; p_date?: string }
+        Returns: Database['public']['Tables']['transactions']['Row'][]
+      }
     }
     Enums: {
       account_kind: "checking" | "savings" | "wallet"

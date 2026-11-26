@@ -22,7 +22,7 @@ import {
   SecuritySheet,
   VerifyActionSheet,
 } from './SettingsSheets'
-import { BankAccountSheet, CapAlertSheet, CategorizeSheet, ReportDetailSheet, ConfirmDelete, EditEntrySheet, EntrySheet, OngoingInstallmentSheet, PayInvoiceSheet, ReconcileSheet, TransferSheet, RecurrenceSheet, TransactionSheet, useLast } from './MoneySheets'
+import { AnticipateSheet, BankAccountSheet, CapAlertSheet, CategorizeSheet, ReportDetailSheet, ConfirmDelete, EditEntrySheet, EntrySheet, OngoingInstallmentSheet, PayInvoiceSheet, ReconcileSheet, TransferSheet, RecurrenceSheet, TransactionSheet, useLast } from './MoneySheets'
 import type { CategoryId, Goal } from '../types'
 
 export default function SheetHost() {
@@ -37,6 +37,8 @@ function SheetSwitch({ sheet, close }: { sheet: SheetState; close: () => void })
       return <EntrySheet close={close} initialKind={sheet.kind} />
     case 'edit':
       return <EditEntrySheet close={close} id={sheet.id} />
+    case 'anticipate':
+      return <AnticipateSheet close={close} group={sheet.group} />
     case 'ongoing':
       return <OngoingInstallmentSheet close={close} id={sheet.id} cardId={sheet.cardId} />
     case 'payInvoice':
@@ -226,7 +228,7 @@ function CardSheet({ close, id }: { close: () => void; id?: string }) {
             onOpen={() => setConfirmDelete(true)}
             onCancel={() => setConfirmDelete(false)}
             label="Remover cartão"
-            question="Remover este cartão? Os gastos dele passam para Dinheiro."
+            question="Remover este cartão? As compras e os pagamentos continuam no histórico, e o saldo não muda."
             loading={pending === 'delete'}
             onConfirm={async () => {
               if (await run('delete', () => cardsApi.remove(card.id), () => dispatch({ type: 'deleteCard', id: card.id }), 'Cartão removido', 'Não deu para remover. Tente de novo.')) close()
@@ -356,14 +358,15 @@ function SaveSheet({ close, goalId }: { close: () => void; goalId: string }) {
             'save',
             async () => {
               const deposit = amount > 0 ? await goalsApi.deposit(goalId, amount, todayISO()) : null
-              if (featuring) await goalsApi.update({ ...goal, featured: true })
-              return deposit
+              // O depósito já foi gravado: se só "meta principal" falhar, não deixa tentar de novo (guardaria em dobro)
+              const featured = featuring ? await goalsApi.update({ ...goal, featured: true }).then(() => true, () => !deposit && Promise.reject()) : false
+              return { deposit, featured }
             },
-            (deposit) => {
+            ({ deposit, featured }) => {
               if (deposit) dispatch({ type: 'deposit', deposit })
-              if (featuring) dispatch({ type: 'feature', goalId: goal.id })
+              if (featured) dispatch({ type: 'feature', goalId: goal.id })
             },
-            message(),
+            ({ featured }) => (featuring && !featured ? `${message().split(' · ')[0]} · não deu para tornar meta principal agora` : message()),
           )
           if (ok) close()
         }}
@@ -553,17 +556,18 @@ function CapSheet({ close }: { close: () => void }) {
     const ok = await run(
       'save',
       async () => {
+        // Cada etapa entra no estado assim que grava: se uma seguinte falhar, a nova tentativa
+        // reaproveita a categoria criada (não cria "Pets" duas vezes)
         const created = existingId ? null : await categoriesApi.create({ label, color })
-        const id = existingId ?? created!.id
-        if (moved) await categoriesApi.recategorize(txIds, id)
-        const cap = await budgetApi.setCap(id, value)
-        return { created, id, cap }
-      },
-      ({ created, id, cap }) => {
         if (created) dispatch({ type: 'addCategory', category: created })
-        if (moved) dispatch({ type: 'recategorize', ids: txIds, category: id })
-        dispatch({ type: 'setCap', category: cap.category, value: cap.value })
+        const id = existingId ?? created!.id
+        if (moved) {
+          await categoriesApi.recategorize(txIds, id)
+          dispatch({ type: 'recategorize', ids: txIds, category: id })
+        }
+        return budgetApi.setCap(id, value)
       },
+      (cap) => dispatch({ type: 'setCap', category: cap.category, value: cap.value }),
       `Teto de ${label} criado${moved ? ` · ${moved} ${moved === 1 ? 'lançamento incluído' : 'lançamentos incluídos'}` : ''}`,
     )
     if (ok) close()

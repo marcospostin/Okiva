@@ -63,6 +63,8 @@ export interface Transaction {
   posted?: boolean
   /** Parcela que já estava no valor da fatura informado (cadastro do cartão) ou lido (importação): não soma de novo */
   alreadyInInvoice?: boolean
+  /** Cartão que foi removido (nome). Compra fica fora do saldo; pagamento de fatura continua tirando do saldo */
+  removedCard?: string
   source: 'manual' | 'fatura'
   /** Imported invoice this expense came from (source 'fatura') */
   invoiceId?: string

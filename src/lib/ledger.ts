@@ -5,7 +5,10 @@
  *  - Saldo = soma dos saldos iniciais das contas + receitas − gastos fora do cartão − pagamentos de fatura
  *    (só lançamentos com data até hoje). Gasto no cartão não mexe no saldo: o dinheiro sai ao pagar a fatura.
  *  - Teto / gastos do mês = só `expense`, no mês da data (cada parcela no mês dela).
- *  - Fatura do cartão = gastos no cartão já "postados" − pagamentos de fatura.
+ *  - Fatura do cartão = gastos no cartão já "postados" − pagamentos de fatura. Negativa = crédito
+ *    (pagou a mais): as próximas compras consomem, e o que sobrar vira desconto na próxima fatura.
+ *  - Cartão removido: compras ficam como gasto (teto, relatórios) e fora do saldo; pagamentos de fatura
+ *    continuam tirando do saldo e fora dos gastos do mês.
  */
 import type { Account, AppState, Card, CategoryId, IncomeSource, Recurrence, Transaction, TxKind } from '../types'
 import { toISO, uid } from './format'
@@ -36,6 +39,8 @@ export function balanceEffect(t: Transaction, today: string) {
   if (k === 'transfer') return 0
   // Ajuste: valor com sinal; no cartão mexe na fatura, não no saldo
   if (k === 'adjustment') return t.method.type === 'card' ? 0 : t.amount
+  // Compra de cartão removido: o dinheiro sai (ou saiu) no pagamento da fatura, não na compra
+  if (t.removedCard) return 0
   return t.method.type === 'card' ? 0 : -t.amount
 }
 
@@ -56,7 +61,8 @@ export const isMovement = (t: Pick<Transaction, 'kind'>) => kindOf(t) === 'trans
 export function adjustInvoice(cards: Card[], tx: Transaction, sign: 1 | -1, today: string) {
   const e = cardEffect(tx, today)
   if (!e) return cards
-  return cards.map((c) => (c.id === e.cardId ? { ...c, invoice: Math.max(0, round2(c.invoice + sign * e.delta)) } : c))
+  // Sem cortar em zero: negativa = crédito (pagou a mais), e desfazer sempre volta ao valor certo
+  return cards.map((c) => (c.id === e.cardId ? { ...c, invoice: round2(c.invoice + sign * e.delta) } : c))
 }
 
 export const round2 = (n: number) => Math.round(n * 100) / 100
@@ -174,6 +180,29 @@ export function installmentGroup(state: Pick<AppState, 'transactions'>, group: s
   return state.transactions.filter((t) => t.installment?.group === group).sort((a, b) => a.installment!.number - b.installment!.number)
 }
 
+/** Parcelas no cartão que ainda não entraram na fatura, da última para a primeira (ordem em que o banco adianta). */
+export function futureCardInstallments(group: Transaction[], today: string) {
+  return group
+    .filter((t) => t.method.type === 'card' && kindOf(t) === 'expense' && !isPosted(t, today) && t.date > today)
+    .sort((a, b) => (b.installment?.number ?? 0) - (a.installment?.number ?? 0))
+}
+
+/**
+ * Adiantar parcelas (igual à RPC anticipate_installments): as `count` últimas parcelas futuras
+ * entram na fatura de hoje, com o desconto dividido entre elas em centavos (a sobra vai na última).
+ */
+export function anticipateInstallments(group: Transaction[], count: number, discount: number, today: string): Transaction[] {
+  const picked = futureCardInstallments(group, today).slice(0, count)
+  const total = picked.reduce((sum, t) => sum + t.amount, 0)
+  const cents = Math.round(discount * 100)
+  let left = cents
+  return picked.map((t, i) => {
+    const share = i === picked.length - 1 ? left : Math.floor((cents * t.amount) / total)
+    if (i < picked.length - 1) left -= share
+    return { ...t, date: today, posted: true, amount: round2(t.amount - share / 100) }
+  })
+}
+
 /* ---------------------------------------------------------- recorrências */
 
 const lastDayOf = (y: number, m: number) => new Date(y, m, 0).getDate()
@@ -288,3 +317,10 @@ export function processDueLocal(input: AppState, today: string): AppState {
   state = { ...state, cards, recurrences, transactions: [...created, ...transactions].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0)) }
   return state
 }
+
+/* ------------------------------------------------------------- fatura e crédito */
+
+/** Quanto falta pagar da fatura (nunca negativo). */
+export const invoiceDue = (c: Pick<Card, 'invoice'>) => Math.max(0, c.invoice)
+/** Crédito do cartão: o que foi pago a mais e ainda não foi usado. */
+export const invoiceCredit = (c: Pick<Card, 'invoice'>) => Math.max(0, -c.invoice)
