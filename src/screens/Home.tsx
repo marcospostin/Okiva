@@ -340,7 +340,7 @@ export default function Home() {
             <p className="font-inter text-[11px] text-esk-muted">Bem-vindo de volta</p>
             <p className="font-inter-m text-[18px] font-medium text-white">Olá, {state.user?.name.split(' ')[0] ?? 'Lucas'}</p>
           </div>
-          <div className="flex shrink-0 flex-col items-end gap-[6px]">
+          <div className="flex shrink-0 flex-col items-end gap-[6px] md:flex-row-reverse md:items-center md:gap-2">
             <p className="flex items-center gap-[0.22em] font-logo text-[22px] leading-none font-bold tracking-[-0.6px] text-esk-lime md:text-[26px]"><Isotype className="md:hidden" />Okiva</p>
             {plus && <span className="rounded-full bg-esk-lilac px-2 py-1 font-mono text-[9px] leading-none font-medium tracking-[0.8px] text-esk-ink">PLUS</span>}
           </div>
@@ -824,7 +824,7 @@ export default function Home() {
           </div>
         </div>
       </Page>
-      <footer className="mt-auto px-[32px] pb-6 text-center md:px-10 md:pb-8 lg:px-14 3xl:px-16">
+      <footer className="mt-auto px-[32px] pb-6 text-center md:-translate-x-[52px] md:px-10 md:pb-8 lg:px-14 3xl:-translate-x-[60px] 3xl:px-16">
         <p className="font-inter text-[10px] leading-[1.4] text-esk-muted">
           Seu assistente para acompanhar contas, cartões e metas.
         </p>
