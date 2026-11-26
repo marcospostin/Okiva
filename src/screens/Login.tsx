@@ -8,6 +8,7 @@ import { errorMessage, USE_SUPABASE } from '../services/http'
 import { accountState, useStore } from '../state/store'
 import { useUI } from '../state/ui'
 import type { AppState, User } from '../types'
+import { Isotype } from '../components/Isotype'
 
 type Mode = 'login' | 'signup' | 'forgot' | 'reset'
 
@@ -40,7 +41,7 @@ export default function Login({ recovery, onRecoveryDone, notice }: { recovery?:
     <div className="grid min-h-dvh bg-esk-bg md:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_592px] 3xl:grid-cols-[minmax(0,1fr)_656px]">
       <div className="hidden p-6 md:block lg:p-12 lg:pr-0">
         <div className="flex h-full flex-col justify-between rounded-[34px] p-10 text-esk-ink lg:p-14" style={{ backgroundImage: 'var(--esk-gradient-hero)' }}>
-          <p className="font-logo text-[54px] leading-none font-bold tracking-[-1.7px] 3xl:text-[66px]">Okiva</p>
+          <p className="flex items-center gap-[0.22em] font-logo text-[54px] leading-none font-bold tracking-[-1.7px] 3xl:text-[66px]"><Isotype />Okiva</p>
           <div>
             <p className="max-w-[460px] font-sat text-[44px] leading-[1.05] font-medium tracking-[-1.8px] 3xl:text-[56px]">
               Veja com clareza suas contas e cartões e leve seu dinheiro mais longe.
@@ -54,7 +55,7 @@ export default function Login({ recovery, onRecoveryDone, notice }: { recovery?:
 
       <div className="flex flex-col justify-center px-[32px] py-12 md:px-12 lg:px-24 3xl:px-32">
         <div className="mx-auto w-full max-w-[400px]">
-          <p className="font-logo text-[42px] leading-none font-bold tracking-[-1.2px] text-esk-lime md:hidden">Okiva</p>
+          <p className="flex items-center gap-[0.22em] font-logo text-[42px] leading-none font-bold tracking-[-1.2px] text-esk-lime md:hidden"><Isotype />Okiva</p>
           {mode === 'login' && <LoginForm onSwitch={() => setMode('signup')} onForgot={() => setMode('forgot')} />}
           {mode === 'signup' && <SignupForm onSwitch={() => setMode('login')} />}
           {mode === 'forgot' && <ForgotForm onBack={() => setMode('login')} />}

@@ -27,6 +27,7 @@ import { useUI } from '../state/ui'
 import { Donut } from '../components/charts'
 import { rememberReportsOpen, type ReportTab } from '../lib/reports'
 import { LockBadge, PlusHint, PLUS_PITCH } from '../components/PlusHint'
+import { Isotype } from '../components/Isotype'
 
 const monthLabel = (key: string) => {
   const name = capitalize(monthName(Number(key.slice(5, 7)) - 1))
@@ -338,9 +339,9 @@ export default function Home() {
             <p className="font-inter text-[11px] text-esk-muted">Bem-vindo de volta</p>
             <p className="font-inter-m text-[18px] font-medium text-white">Olá, {state.user?.name.split(' ')[0] ?? 'Lucas'}</p>
           </div>
-          <div className="flex shrink-0 items-center gap-2">
+          <div className="flex shrink-0 flex-col items-end gap-[6px]">
+            <p className="flex items-center gap-[0.22em] font-logo text-[22px] leading-none font-bold tracking-[-0.6px] text-esk-lime md:text-[26px]"><Isotype />Okiva</p>
             {plus && <span className="rounded-full bg-esk-lilac px-2 py-1 font-mono text-[9px] leading-none font-medium tracking-[0.8px] text-esk-ink">PLUS</span>}
-            <p className="font-logo text-[22px] leading-none font-bold tracking-[-0.6px] text-esk-lime md:text-[26px]">Okiva</p>
           </div>
         </header>
 
@@ -819,6 +820,7 @@ export default function Home() {
         <p className="font-inter text-[10px] leading-[1.4] text-esk-muted">
           Seu assistente para acompanhar contas, cartões e metas.
         </p>
+        <Isotype className="mx-auto mt-4 block text-[28px] text-esk-muted md:text-[34px]" />
       </footer>
     </div>
   )
