@@ -1,5 +1,5 @@
 import { ArrowDownLeft, ArrowLeftRight, Check, ChevronDown, ChevronLeft, ChevronRight, CircleHelp, CreditCard, Repeat, Scale, Sparkles } from 'lucide-react'
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { categoryMeta, UNCATEGORIZED } from '../data/categories'
 import { Asset, CategoryRowIcon, CategoryTileIcon } from '../components/icons'
 import { Avatar, CountUp, cx, Page, SearchField, SearchSummary } from '../components/ui'
@@ -183,14 +183,15 @@ function CategoryTiles({ count, children }: { count: number; children: ReactNode
   }
 
   return (
-    <div className="relative min-w-0" role="region" aria-roledescription="carrossel" aria-label="Categorias do mês">
+    <div className="@container relative min-w-0" role="region" aria-roledescription="carrossel" aria-label="Categorias do mês">
       <div
         ref={rail}
         onScroll={update}
         className={cx(
           '-mx-[32px] flex snap-x snap-mandatory scroll-px-[32px] gap-3 overflow-x-auto px-[32px] pb-1 [scrollbar-width:none] md:mx-0 md:scroll-px-0 md:px-0 [&::-webkit-scrollbar]:hidden',
-          // Each card: ~2.3 visible on phones, ~3.3 from tablets up
-          '[&>*]:shrink-0 [&>*]:basis-[calc((100%-12px)/2.3)] [&>*]:snap-start md:[&>*]:basis-[calc((100%-24px)/3.3)]',
+          // Quantos cards cabem depende da largura da coluna (não da tela): ~2.3 até 460px
+          // (celular e tablet, onde a coluna é estreita), ~3.3 a partir daí (computador)
+          '[&>*]:shrink-0 [&>*]:basis-[calc((100%-12px)/2.3)] [&>*]:snap-start @min-[460px]:[&>*]:basis-[calc((100%-24px)/3.3)]',
         )}
       >
         {children}
@@ -326,7 +327,7 @@ export default function Home() {
     <div className="flex min-h-[calc(100dvh-var(--tabbar-space,0px))] flex-col bg-esk-bg">
       <Page wide className="flex-1">
         {/* Header: avatar opens the account sheet. No bell, no search. */}
-        <header className="flex h-[48px] items-center gap-3 mt-8">
+        <header className="mt-8 flex h-[48px] items-center gap-3 md:mt-10">
           <button
             type="button"
             onClick={() => navigate('settings')}
@@ -340,7 +341,7 @@ export default function Home() {
             <p className="font-inter-m text-[18px] font-medium text-white">Olá, {state.user?.name.split(' ')[0] ?? 'Lucas'}</p>
           </div>
           <div className="flex shrink-0 flex-col items-end gap-[6px]">
-            <p className="flex items-center gap-[0.22em] font-logo text-[22px] leading-none font-bold tracking-[-0.6px] text-esk-lime md:text-[26px]"><Isotype />Okiva</p>
+            <p className="flex items-center gap-[0.22em] font-logo text-[22px] leading-none font-bold tracking-[-0.6px] text-esk-lime md:hidden"><Isotype />Okiva</p>
             {plus && <span className="rounded-full bg-esk-lilac px-2 py-1 font-mono text-[9px] leading-none font-medium tracking-[0.8px] text-esk-ink">PLUS</span>}
           </div>
         </header>
@@ -350,7 +351,7 @@ export default function Home() {
           <div className="flex flex-col gap-6 md:sticky md:top-8 md:self-start">
             <section
               aria-label="Saldo disponível"
-              className="relative flex min-h-[184px] flex-col gap-3 overflow-hidden rounded-[32px] px-6 py-[22px] lg:min-h-[240px] lg:rounded-[34px] lg:px-8 lg:py-7 3xl:min-h-[280px]"
+              className="@container relative flex min-h-[184px] flex-col gap-3 overflow-hidden rounded-[32px] px-6 py-[22px] lg:min-h-[240px] lg:rounded-[34px] lg:px-8 lg:py-7 3xl:min-h-[280px]"
               style={{ backgroundImage: 'var(--esk-gradient-hero)' }}
             >
               <div className="flex items-center justify-between">
@@ -368,7 +369,10 @@ export default function Home() {
                 </button>
               </div>
               <p
-                className="font-inter-m text-[43px] leading-[1.35] font-medium tracking-[-1.72px] whitespace-nowrap text-esk-ink lg:text-[56px] lg:tracking-[-2.4px] 3xl:text-[66px] 3xl:tracking-[-3px]"
+                className="font-inter-m text-[min(43px,var(--fit))] leading-[1.35] font-medium tracking-[-0.04em] whitespace-nowrap text-esk-ink lg:text-[min(56px,var(--fit))] 3xl:text-[min(66px,var(--fit))] 3xl:tracking-[-0.045em]"
+                // Cabe sempre no cartão: cada caractere ocupa ~0,5 da altura da letra, então a letra
+                // pode ter até 96% da largura útil dividida por (0,5 × caracteres)
+                style={{ '--fit': `${Math.min(16, 192 / Math.max(brl(balance).length, 1))}cqw` } as CSSProperties}
                 aria-live="polite"
               >
                 <CountUp value={balance} format={(n) => privateMoney(brl(n), hidden)} />
@@ -554,7 +558,7 @@ export default function Home() {
                       type="button"
                       onClick={() => navigate('goals')}
                       className={cx(
-                        'flex h-[142px] min-w-0 animate-rise flex-col items-start gap-2 rounded-[26px] pt-4 pr-[10px] pb-[14px] pl-[13px] text-left text-esk-ink transition duration-200 hover:-translate-y-0.5 hover:brightness-[0.97] active:scale-[0.97] lg:h-[156px] lg:pl-4',
+                        '@container flex h-[142px] min-w-0 animate-rise flex-col items-start gap-2 rounded-[26px] pt-4 pr-[10px] pb-[14px] pl-[13px] text-left text-esk-ink transition duration-200 hover:-translate-y-0.5 hover:brightness-[0.97] active:scale-[0.97] lg:h-[156px] lg:pl-4',
                         isFuture && 'opacity-60',
                       )}
                       style={{ backgroundColor: meta.color, animationDelay: `${80 + Math.min(i, 5) * 60}ms` }}
@@ -562,7 +566,11 @@ export default function Home() {
                       <CategoryTileIcon category={c.category} />
                       <span className="flex min-w-0 flex-col gap-[3px] leading-[1.3]">
                         <span className="truncate font-inter-m text-[10px] font-medium lg:text-[11px]">{meta.label}</span>
-                        <span className="font-inter-sb text-[18px] font-semibold tracking-[-0.54px] whitespace-nowrap lg:text-[20px]">
+                        <span
+                          className="font-inter-sb text-[min(18px,var(--fit))] font-semibold tracking-[-0.03em] whitespace-nowrap lg:text-[min(20px,var(--fit))]"
+                          // Cabe sempre no card: cada caractere ocupa ~0,5 da altura da letra (até ~92% da largura útil)
+                          style={{ '--fit': `${180 / Math.max(brlShort(c.amount).length, 1)}cqw` } as CSSProperties}
+                        >
                           {privateMoney(brlShort(c.amount), hidden)}
                         </span>
                       </span>

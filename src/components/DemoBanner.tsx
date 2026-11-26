@@ -28,7 +28,7 @@ export default function DemoBanner() {
   }
 
   return (
-    <div role="status" className="border-b border-esk-lilac/20 bg-esk-lilac/10">
+    <div role="status" className="border-b border-esk-lilac/20 bg-esk-lilac/10 md:pl-[104px] 3xl:pl-[120px]">
       <div className="mx-auto flex max-w-[1280px] items-center justify-between gap-3 px-[26px] py-[10px] md:px-10">
         <p className="flex items-center gap-2 font-sat text-[13px] text-esk-lilac">
           <Sparkles size={14} strokeWidth={1.8} aria-hidden className="shrink-0" />

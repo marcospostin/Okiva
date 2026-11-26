@@ -3,7 +3,7 @@ import { isRecoverySession, markRecoveryPending, onPasswordRecovery, onSignedOut
 import { USE_SUPABASE } from './services/http'
 import DemoBanner from './components/DemoBanner'
 import { Splash } from './components/Splash'
-import TabBar from './components/TabBar'
+import TabBar, { SideRail } from './components/TabBar'
 import { cx, ScreenSkeleton, ToastView } from './components/ui'
 import Home from './screens/Home'
 import Login from './screens/Login'
@@ -132,7 +132,10 @@ function Screen({ onReady }: { onReady: () => void }) {
   return (
     <div className="tabbar-space">
       <DemoBanner />
-      <main key={view} className={cx('pb-[var(--tabbar-space)]', direction === 'back' ? 'animate-screen-back' : 'animate-screen-forward')}>
+      {/* Tablet/computador: barra lateral na mesma linha do conteúdo, então desce junto com a faixa de demonstração */}
+      <div className="md:flex md:items-start">
+        <SideRail />
+        <main key={view} className={cx('min-w-0 flex-1 pb-[var(--tabbar-space)]', direction === 'back' ? 'animate-screen-back' : 'animate-screen-forward')}>
         <Suspense fallback={<ScreenSkeleton />}>
           {view === 'home' && <Home />}
           {view === 'cards' && <Cards />}
@@ -145,8 +148,9 @@ function Screen({ onReady }: { onReady: () => void }) {
           {view === 'invoice' && state.stage === 2 && <Invoice />}
           {view === 'assistant' && state.stage === 2 && <Assistant />}
         </Suspense>
-      </main>
-      {/* Small screens only (md:hidden inside) */}
+        </main>
+      </div>
+      {/* Celular: menu inferior (md:hidden) */}
       <TabBar />
       {sheet && (
         <Suspense fallback={null}>

@@ -25,7 +25,7 @@ export function PlusHint({
   onClose: () => void
   /** Posição da seta (ex. "37.5%"), apontando para o item tocado */
   arrowLeft: string
-  arrow?: 'bottom' | 'top'
+  arrow?: 'bottom' | 'top' | 'left'
   /** Toques dentro deste elemento não fecham o aviso (o próprio item tocado) */
   within?: RefObject<HTMLElement | null>
   className?: string
@@ -87,10 +87,14 @@ export function PlusHint({
       <span
         aria-hidden
         className={cx(
-          'absolute size-3 -translate-x-1/2 bg-esk-surface ring-1 ring-esk-track',
-          arrow === 'bottom' ? '-bottom-[6px] rotate-45 [clip-path:polygon(100%_0,100%_100%,0_100%)]' : '-top-[6px] rotate-45 [clip-path:polygon(0_0,100%_0,0_100%)]',
+          'absolute size-3 bg-esk-surface ring-1 ring-esk-track',
+          arrow === 'left'
+            ? 'top-1/2 -left-[6px] -translate-y-1/2 rotate-45 [clip-path:polygon(0_0,0_100%,100%_100%)]'
+            : arrow === 'bottom'
+              ? '-bottom-[6px] -translate-x-1/2 rotate-45 [clip-path:polygon(100%_0,100%_100%,0_100%)]'
+              : '-top-[6px] -translate-x-1/2 rotate-45 [clip-path:polygon(0_0,100%_0,0_100%)]',
         )}
-        style={{ left: arrowLeft }}
+        style={arrow === 'left' ? undefined : { left: arrowLeft }}
       />
     </div>
   )
